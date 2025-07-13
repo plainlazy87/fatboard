@@ -530,27 +530,25 @@ with st.container():
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# ---- Raw Data Table ----
 with st.container():
     st.markdown('<div class="section-title">📋 Raw Weight Log</div>', unsafe_allow_html=True)
 
-    # Ensure 'date' column is a proper datetime
+    # Ensure datetime parsing
     df['date'] = pd.to_datetime(df['date'], errors='coerce')
 
-    # Drop rows with invalid/missing dates
+    # Drop rows with missing/invalid dates
     df_clean = df.dropna(subset=['date']).copy()
 
-    # Sort by date descending, then by original row index descending to break ties
-    df_clean = df_clean.sort_values(by=['date'], ascending=[False])
+    # Add index to preserve original order for tiebreaking
+    df_clean['orig_index'] = df_clean.index
 
-    # Optional: Show debug preview of sorted dates (uncomment if needed)
-    # st.write(df_clean[['date', 'weight_stlbs']].head(10))
+    # Sort by date (and time if included), then by original index descending
+    df_clean = df_clean.sort_values(by=['date', 'orig_index'], ascending=[False, False])
 
-    # Prepare the display table
+    # Format for display
     df_display = df_clean[['date', 'weight_stlbs']].rename(columns={
         'date': 'Date',
         'weight_stlbs': 'Weight'
     })
 
-    # Show sorted data in table
     st.dataframe(df_display.reset_index(drop=True))
