@@ -533,8 +533,18 @@ st.markdown("<br>", unsafe_allow_html=True)
 # ---- Raw Data Table ----
 with st.container():
     st.markdown('<div class="section-title">📋 Raw Weight Log</div>', unsafe_allow_html=True)
-st.dataframe(
-    df.sort_values(by="date", ascending=False)[['date', 'weight_stlbs']]
-      .rename(columns={"date": "Date", "weight_stlbs": "Weight"})
-)
 
+    # Ensure 'date' is datetime
+    df['date'] = pd.to_datetime(df['date'])
+
+    # Sort by date descending (newest first)
+    df_sorted = df.sort_values(by='date', ascending=False).copy()
+
+    # Format date for display
+    df_sorted['date'] = df_sorted['date'].dt.strftime('%Y-%m-%d')
+
+    # Display the table
+    st.dataframe(
+        df_sorted[['date', 'weight_stlbs']]
+        .rename(columns={"date": "Date", "weight_stlbs": "Weight"})
+    )
