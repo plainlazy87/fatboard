@@ -6,6 +6,25 @@ import plotly.graph_objects as go
 import json
 import os
 
+import streamlit as st
+
+# Check if tokens are already saved in this session
+if "tokens" not in st.session_state:
+    # Get the 'code' from the URL if it exists
+    code = st.experimental_get_query_params().get("code")
+    
+    if code:
+        # Use the code to get tokens (call your function)
+        tokens = get_token_from_code(code[0])  # code is a list, take first element
+        
+        # Save tokens to session state
+        st.session_state["tokens"] = tokens
+        
+        # Remove the code from URL to avoid using it again
+        st.experimental_set_query_params()
+else:
+    tokens = st.session_state["tokens"]
+
 # ---- Fitbit OAuth2 Credentials (replace with yours) ----
 CLIENT_ID = st.secrets["FITBIT_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["FITBIT_CLIENT_SECRET"]
