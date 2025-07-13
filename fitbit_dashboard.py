@@ -141,7 +141,7 @@ st.title("📉 Leon's Weight Loss Dashboard")
 
 # === IMPORTANT FIX HERE ===
 # Use ONLY experimental_get_query_params for reading query params
-query_params = st.experimental_get_query_params()
+query_params = st.query_params()
 code = query_params.get("code", [None])[0]
 
 # Load tokens from file/session
