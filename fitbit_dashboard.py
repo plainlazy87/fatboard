@@ -7,8 +7,8 @@ import json
 import os
 
 # ---- Fitbit OAuth2 Credentials (replace with yours) ----
-CLIENT_ID = os.getenv("FITBIT_CLIENT_ID")
-CLIENT_SECRET = os.getenv("FITBIT_CLIENT_SECRET")
+CLIENT_ID = st.secrets["FITBIT_CLIENT_ID"]
+CLIENT_SECRET = st.secrets["FITBIT_CLIENT_SECRET"]
 REDIRECT_URI = "https://fatboard.streamlit.app"
 TOKEN_URL = "https://api.fitbit.com/oauth2/token"
 
