@@ -6,25 +6,6 @@ import plotly.graph_objects as go
 import json
 import os
 
-import streamlit as st
-
-# Check if tokens are already saved in this session
-if "tokens" not in st.session_state:
-    # Get the 'code' from the URL if it exists
-    code = st.experimental_get_query_params().get("code")
-    
-    if code:
-        # Use the code to get tokens (call your function)
-        tokens = get_token_from_code(code[0])  # code is a list, take first element
-        
-        # Save tokens to session state
-        st.session_state["tokens"] = tokens
-        
-        # Remove the code from URL to avoid using it again
-        st.experimental_set_query_params()
-else:
-    tokens = st.session_state["tokens"]
-
 # ---- Fitbit OAuth2 Credentials (replace with yours) ----
 CLIENT_ID = st.secrets["FITBIT_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["FITBIT_CLIENT_SECRET"]
@@ -116,7 +97,7 @@ def fetch_weight_data(access_token):
 # ---- Streamlit App ----
 st.set_page_config(page_title="Fitbit Weight Loss Dashboard", layout="centered")
 
-# Custom CSS
+# Custom CSS (unchanged) ...
 st.markdown(
     """
     <style>
@@ -158,29 +139,38 @@ st.markdown(
 
 st.title("📉 Leon's Weight Loss Dashboard")
 
-code = st.query_params.get("code", [None])[0]
+# === IMPORTANT FIX HERE ===
+# Use ONLY experimental_get_query_params for reading query params
+query_params = st.experimental_get_query_params()
+code = query_params.get("code", [None])[0]
+
+# Load tokens from file/session
 tokens = load_tokens()
 access_token = tokens.get("access_token") if tokens else None
 
-if not access_token:
-    if not code:
-        st.markdown(f"[🔒 Connect your Fitbit account]({AUTH_URL})")
-        st.stop()
-    else:
-        tokens = get_token_from_code(code)
-        if "access_token" not in tokens:
-            st.error("❌ Failed to authenticate with Fitbit.")
-            st.json(tokens)
-            st.stop()
-        save_tokens(tokens)
-        access_token = tokens["access_token"]
+# If no access token and no code, show login link and stop
+if not access_token and not code:
+    st.markdown(f"[🔒 Connect your Fitbit account]({AUTH_URL})")
+    st.stop()
 
+# If code is present (first auth), exchange for tokens and save
+if code and not access_token:
+    tokens = get_token_from_code(code)
+    if "access_token" not in tokens:
+        st.error("❌ Failed to authenticate with Fitbit.")
+        st.json(tokens)
+        st.stop()
+    save_tokens(tokens)
+    access_token = tokens["access_token"]
+
+# If tokens have refresh token, try to refresh
 if tokens and "refresh_token" in tokens:
     tokens = refresh_token(tokens["refresh_token"])
     if "access_token" in tokens:
         save_tokens(tokens)
         access_token = tokens["access_token"]
 
+# Fetch data
 data = fetch_weight_data(access_token)
 
 if "weight" not in data or len(data["weight"]) == 0:
@@ -248,6 +238,16 @@ progress_style = """
 </style>
 """
 st.markdown(progress_style, unsafe_allow_html=True)
+
+# (The rest of your UI code remains unchanged, just remove all st.query_params references!)
+
+# --- Replace any remaining st.query_params.get(...) calls with query_params.get(...)
+
+# You can keep the rest of your script as is, just be sure not to mix st.query_params with experimental_get_query_params
+
+# For brevity, I’m not repeating the full UI code here as it’s unchanged.
+
+
 
 # Row 1 (3 columns): show 2 boxes, skip 3rd
 col1, col2, col3 = st.columns(3)
