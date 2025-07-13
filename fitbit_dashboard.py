@@ -422,7 +422,17 @@ with st.container():
             ticktext=y_tick_text,
             gridcolor="#555",
         ),
-        legend=dict(bgcolor="#3C3C3C", bordercolor="#222", borderwidth=1, font=dict(color="white"))
+legend=dict(
+    bgcolor="#3C3C3C",
+    bordercolor="#222",
+    borderwidth=1,
+    font=dict(color="white"),
+    orientation="h",
+    yanchor="bottom",
+    y=1.1,
+    xanchor="right",
+    x=1
+)
     )
     st.plotly_chart(fig, use_container_width=True)
 
