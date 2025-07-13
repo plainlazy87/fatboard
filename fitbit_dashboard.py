@@ -533,4 +533,8 @@ st.markdown("<br>", unsafe_allow_html=True)
 # ---- Raw Data Table ----
 with st.container():
     st.markdown('<div class="section-title">📋 Raw Weight Log</div>', unsafe_allow_html=True)
-    st.dataframe(df[['date', 'weight_stlbs']].rename(columns={"date": "Date", "weight_stlbs": "Weight"}))
+st.dataframe(
+    df.sort_values(by="date", ascending=False)[['date', 'weight_stlbs']]
+      .rename(columns={"date": "Date", "weight_stlbs": "Weight"})
+)
+
