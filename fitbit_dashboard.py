@@ -359,7 +359,10 @@ with st.container():
         margin=dict(l=40, r=40, t=40, b=40),
         xaxis_title="Date",
         xaxis=dict(
-            range=[df_7day["dateTime"].min(), df_7day["dateTime"].max()],
+    range=[
+        df_7day["dateTime"].min() - timedelta(days=0.5),
+        df_7day["dateTime"].max() + timedelta(days=0.5)
+    ],
             tickformat="%d-%m-%Y",
             gridcolor="#555",
         ),
