@@ -418,7 +418,9 @@ with st.container():
         margin=dict(l=40, r=40, t=40, b=40),
         xaxis_title="Date",
         yaxis_title="Weight",
-        xaxis=dict(range=[df["dateTime"].min(), df["dateTime"].max()], tickformat="%d-%m-%Y"),
+        xaxis=dict(range=[df["dateTime"].min(), df["dateTime"].max()], 
+                   
+                   tickformat="%d-%m-%Y"),
         yaxis=dict(
             range=[y_min, y_max],
             tickvals=y_ticks,
