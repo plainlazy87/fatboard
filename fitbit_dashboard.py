@@ -538,16 +538,19 @@ with st.container():
     # Ensure 'date' is datetime
     df['date'] = pd.to_datetime(df['date'], errors='coerce')
 
-    # Drop any rows where date couldn't be parsed
+    # Drop rows with invalid dates
     df = df.dropna(subset=['date'])
 
-    # Sort by date DESCENDING, then by index DESCENDING (to show newest within each date first)
-    df_sorted = df.sort_values(by=['date', df.index.name or df.index], ascending=[False, False])
+    # Add a helper column with the original index to preserve entry order
+    df['original_index'] = df.index
 
-    # Optionally strip the time part from display
+    # Sort by date descending, then original index descending (so most recent per day is first)
+    df_sorted = df.sort_values(by=['date', 'original_index'], ascending=[False, False])
+
+    # Optionally display date without time
     df_sorted['date'] = df_sorted['date'].dt.date
 
-    # Show clean table
+    # Show the cleaned dataframe
     st.dataframe(
         df_sorted[['date', 'weight_stlbs']].rename(columns={
             'date': 'Date',
