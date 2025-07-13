@@ -535,22 +535,19 @@ st.markdown("<br>", unsafe_allow_html=True)
 with st.container():
     st.markdown('<div class="section-title">📋 Raw Weight Log</div>', unsafe_allow_html=True)
 
-    # Ensure 'date' is datetime
-    df['date'] = pd.to_datetime(df['date'], errors='coerce')
+    # Drop rows with invalid 'dateTime'
+    df = df.dropna(subset=['dateTime'])
 
-    # Drop rows with invalid dates
-    df = df.dropna(subset=['date'])
-
-    # Add a helper column with the original index to preserve entry order
+    # Add helper column for original order
     df['original_index'] = df.index
 
-    # Sort by date descending, then original index descending (so most recent per day is first)
-    df_sorted = df.sort_values(by=['date', 'original_index'], ascending=[False, False])
+    # Sort by 'dateTime' descending (newest first), then original index descending to keep entry order on same datetime
+    df_sorted = df.sort_values(by=['dateTime', 'original_index'], ascending=[False, False])
 
-    # Optionally display date without time
-    df_sorted['date'] = df_sorted['date'].dt.date
+    # Display date only without time
+    df_sorted['date'] = df_sorted['dateTime'].dt.date
 
-    # Show the cleaned dataframe
+    # Show the cleaned dataframe with Date and Weight columns
     st.dataframe(
         df_sorted[['date', 'weight_stlbs']].rename(columns={
             'date': 'Date',
