@@ -530,25 +530,27 @@ with st.container():
 
 st.markdown("<br>", unsafe_allow_html=True)
 
+# --- Last table ---
+
 with st.container():
     st.markdown('<div class="section-title">📋 Raw Weight Log</div>', unsafe_allow_html=True)
 
-    # Ensure datetime parsing
+    # Convert 'date' to datetime (this is the key fix)
     df['date'] = pd.to_datetime(df['date'], errors='coerce')
 
-    # Drop rows with missing/invalid dates
-    df_clean = df.dropna(subset=['date']).copy()
+    # Drop rows where date couldn't be parsed (optional but safe)
+    df = df.dropna(subset=['date'])
 
-    # Add index to preserve original order for tiebreaking
-    df_clean['orig_index'] = df_clean.index
+    # Sort by date descending
+    df_sorted = df.sort_values(by='date', ascending=False)
 
-    # Sort by date (and time if included), then by original index descending
-    df_clean = df_clean.sort_values(by=['date', 'orig_index'], ascending=[False, False])
+    # Format the date column if you want to hide the time
+    df_sorted['date'] = df_sorted['date'].dt.date
 
-    # Format for display
-    df_display = df_clean[['date', 'weight_stlbs']].rename(columns={
-        'date': 'Date',
-        'weight_stlbs': 'Weight'
-    })
-
-    st.dataframe(df_display.reset_index(drop=True))
+    # Display just the relevant columns with nice headers
+    st.dataframe(
+        df_sorted[['date', 'weight_stlbs']].rename(columns={
+            'date': 'Date',
+            'weight_stlbs': 'Weight'
+        }).reset_index(drop=True)
+    )
