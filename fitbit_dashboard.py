@@ -534,16 +534,17 @@ st.markdown("<br>", unsafe_allow_html=True)
 with st.container():
     st.markdown('<div class="section-title">📋 Raw Weight Log</div>', unsafe_allow_html=True)
 
-    # Ensure 'date' is datetime
-    df['date'] = pd.to_datetime(df['date'], errors='coerce')
+    # Ensure 'date' includes full datetime if available
+    df['datetime'] = pd.to_datetime(df['date'], errors='coerce')
 
-    # Drop rows with invalid/missing dates
-    df_clean = df.dropna(subset=['date']).copy()
+    # Drop invalid/missing datetimes
+    df_clean = df.dropna(subset=['datetime']).copy()
 
-    # Sort by date (descending), then by index (descending) to preserve latest input order
-    df_clean = df_clean.sort_values(by=['date'], ascending=False)
+    # Sort by full datetime (most recent first)
+    df_clean = df_clean.sort_values(by='datetime', ascending=False)
 
-    # Show the table
-    st.dataframe(
-        df_clean[['date', 'weight_stlbs']].rename(columns={"date": "Date", "weight_stlbs": "Weight"})
-    )
+    # Display as just date (hide time) but keep sort by datetime
+    df_clean['Date'] = df_clean['datetime'].dt.date
+    df_display = df_clean[['Date', 'weight_stlbs']].rename(columns={'weight_stlbs': 'Weight'})
+
+    st.dataframe(df_display)
