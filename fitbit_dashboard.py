@@ -534,19 +534,17 @@ st.markdown("<br>", unsafe_allow_html=True)
 with st.container():
     st.markdown('<div class="section-title">📋 Raw Weight Log</div>', unsafe_allow_html=True)
 
-    # Convert 'date' column to datetime, coerce errors to NaT
+    # Convert 'date' to datetime, coerce errors, drop bad ones
     df['date'] = pd.to_datetime(df['date'], errors='coerce')
-
-    # Drop rows where 'date' couldn't be parsed
     df_clean = df.dropna(subset=['date']).copy()
 
-    # Sort by date descending (newest first)
-    df_clean = df_clean.sort_values(by='date', ascending=False)
+    # Sort by date descending, then by index descending (for multiple entries per day)
+    df_clean = df_clean.sort_values(by=['date', df_clean.index], ascending=[False, False])
 
-    # Format date for display
+    # Format date column for display
     df_clean['date'] = df_clean['date'].dt.strftime('%Y-%m-%d')
 
-    # Show the table
+    # Display the table
     st.dataframe(
         df_clean[['date', 'weight_stlbs']].rename(columns={"date": "Date", "weight_stlbs": "Weight"})
     )
