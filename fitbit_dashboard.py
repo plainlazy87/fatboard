@@ -303,15 +303,28 @@ with col6:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # --- Helper function for stone + lbs ticks ---
-def lbs_to_stlbs_ticks(lbs):
-    stn = int(lbs // 14)
-    rem_lbs = lbs % 14
-    return f"{stn}st\n{rem_lbs:.0f}lbs"
+#def lbs_to_stlbs_ticks(lbs):
+#    stn = int(lbs // 14)
+#    rem_lbs = lbs % 14
+#    return f"{stn}st\n{rem_lbs:.0f}lbs"
 
-y_min = int(df["weight_lbs"].min()) - 1
-y_max = int(df["weight_lbs"].max()) + 1
-y_ticks = list(range(y_min, y_max + 1))
-y_tick_text = [lbs_to_stlbs_ticks(i) for i in y_ticks]
+#y_min = int(df["weight_lbs"].min()) - 1
+#y_max = int(df["weight_lbs"].max()) + 1
+#y_ticks = list(range(y_min, y_max + 1))
+#y_tick_text = [lbs_to_stlbs_ticks(i) for i in y_ticks]
+
+
+
+# --- Helper function for stone + lbs ticks ---
+def lbs_to_stlbs_ticks(lbs):
+    stones = int(lbs // 14)
+    pounds = int(round(lbs % 14))
+
+    if pounds == 14:
+        stones += 1
+        pounds = 0
+
+    return f"{stones}st\n{pounds}lbs"
 
 # ---- Last 7 Days Weight Graph ----
 with st.container():
