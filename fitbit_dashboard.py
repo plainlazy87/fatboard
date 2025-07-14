@@ -302,16 +302,16 @@ with col6:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# ---- Helper Function ----
+# --- Helper function for stone + lbs ticks ---
 def lbs_to_stlbs_ticks(lbs):
-    stones = int(lbs // 14)
-    pounds = int(round(lbs % 14))
+    stn = int(lbs // 14)
+    rem_lbs = lbs % 14
+    return f"{stn}st\n{rem_lbs:.0f}lbs"
 
-    if pounds == 14:
-        stones += 1
-        pounds = 0
-
-    return f"{stones}st {pounds}lbs"
+y_min = int(df["weight_lbs"].min()) - 1
+y_max = int(df["weight_lbs"].max()) + 1
+y_ticks = list(range(y_min, y_max + 1))
+y_tick_text = [lbs_to_stlbs_ticks(i) for i in y_ticks]
 
 # ---- Last 7 Days Weight Graph ----
 with st.container():
@@ -322,11 +322,10 @@ with st.container():
     y_min_7 = df_7day["weight_lbs"].min() - 1
     y_max_7 = df_7day["weight_lbs"].max() + 1
 
-    # Use float math carefully to avoid rounding issues
     y_ticks_7 = []
     current_tick = y_min_7
     while current_tick <= y_max_7:
-        y_ticks_7.append(round(current_tick + 1e-6, 1))  # Add epsilon to fix float precision issues
+        y_ticks_7.append(round(current_tick, 1))
         current_tick += 0.5
 
     y_tick_text_7 = [lbs_to_stlbs_ticks(tick) for tick in y_ticks_7]
@@ -358,10 +357,10 @@ with st.container():
         margin=dict(l=40, r=40, t=40, b=40),
         xaxis_title="Date",
         xaxis=dict(
-            range=[
-                df_7day["dateTime"].min() - timedelta(days=0.5),
-                df_7day["dateTime"].max() + timedelta(days=0.5)
-            ],
+    range=[
+        df_7day["dateTime"].min() - timedelta(days=0.5),
+        df_7day["dateTime"].max() + timedelta(days=0.5)
+    ],
             tickformat="%d-%m-%Y",
             gridcolor="#555",
         ),
@@ -371,25 +370,21 @@ with st.container():
             ticktext=y_tick_text_7,
             gridcolor="#555",
         ),
-        legend=dict(
-            bgcolor="#3C3C3C",
-            bordercolor="#222",
-            borderwidth=1,
-            font=dict(color="white"),
-            orientation="h",
-            yanchor="bottom",
-            y=1.1,
-            xanchor="right",
-            x=1
-        )
+legend=dict(
+    bgcolor="#3C3C3C",
+    bordercolor="#222",
+    borderwidth=1,
+    font=dict(color="white"),
+    orientation="h",
+    yanchor="bottom",
+    y=1.1,
+    xanchor="right",
+    x=1
+)
     )
-
     st.plotly_chart(fig_7day, use_container_width=True)
+
     st.markdown("<br>", unsafe_allow_html=True)
-
-
-
-
 
 
 
