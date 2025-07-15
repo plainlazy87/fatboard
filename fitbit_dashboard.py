@@ -214,11 +214,9 @@ else:
     countdown_days = None
 
 # ---- Metrics Display ----
-#st.subheader("📌 Latest Weigh-In")
-#st.metric("Latest Weight", lbs_to_st_lbs(current_weight), delta=f"{current_weight - start_weight:.1f} lbs")
+st.subheader("📌 Latest Weigh-In")
+st.metric("Latest Weight", lbs_to_st_lbs(current_weight), delta=f"{current_weight - start_weight:.1f} lbs")
 
-st.subheader("Latest weigh-in")
-st.markdown(f'<div style="font-size:48px; font-weight:bold; color:#f0f0f0;">{latest_weight} kg</div>', unsafe_allow_html=True)
 
 
 progress_style = """
