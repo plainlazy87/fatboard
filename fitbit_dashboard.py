@@ -4,11 +4,13 @@ import json
 import os
 import time
 from datetime import datetime, timedelta
-from streamlit.runtime.scriptrunner import ScriptRerunException
 
-# Custom rerun function to replace deprecated st.experimental_rerun()
+# Safe rerun function to support multiple Streamlit versions/environments
 def rerun():
-    raise ScriptRerunException
+    try:
+        st.experimental_rerun()
+    except AttributeError:
+        raise RuntimeError("Trigger rerun")
 
 # ---- Fitbit OAuth2 Credentials ----
 CLIENT_ID = st.secrets["FITBIT_CLIENT_ID"]
@@ -127,7 +129,7 @@ def main():
             tokens = exchange_code_for_tokens(auth_code)
             if tokens:
                 st.success("Authorization successful! Tokens saved. Reloading...")
-                rerun()  # <-- use custom rerun()
+                rerun()
     else:
         access_token = get_valid_access_token()
         if access_token:
@@ -142,6 +144,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 # ---------------------------------------------------------------------------------------------------------------------
