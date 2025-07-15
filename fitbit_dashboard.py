@@ -56,7 +56,7 @@ def exchange_code_for_tokens(code):
         st.error(f"Failed to exchange code: {response.text}")
         return None
 
-def refresh_access_token(refresh_token):
+def refresh_token(refresh_token):
     response = requests.post(
         TOKEN_URL,
         data={
@@ -82,7 +82,7 @@ def get_valid_access_token():
 
     # Refresh if expired or about to expire in 60 seconds
     if int(time.time()) >= tokens.get("expires_at", 0) - 60:
-        tokens = refresh_access_token(tokens["refresh_token"])
+        tokens = refresh_token(tokens["refresh_token"])
         if not tokens:
             return None
 
