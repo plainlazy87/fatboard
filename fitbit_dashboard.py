@@ -7,18 +7,6 @@ import json
 import os
 
 
-st.markdown(
-    """
-    <style>
-    div[data-testid="metric-container"] > div:nth-child(2) > div {
-        color: #f0f0f0 !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-
 # ---- Fitbit OAuth2 Credentials (replace with yours) ----
 CLIENT_ID = st.secrets["FITBIT_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["FITBIT_CLIENT_SECRET"]
@@ -226,8 +214,33 @@ else:
     countdown_days = None
 
 # ---- Metrics Display ----
-st.subheader("📌 Latest Weigh-In")
-st.metric("Latest Weight", lbs_to_st_lbs(current_weight), delta=f"{current_weight - start_weight:.1f} lbs")
+#st.subheader("📌 Latest Weigh-In")
+#st.metric("Latest Weight", lbs_to_st_lbs(current_weight), delta=f"{current_weight - start_weight:.1f} lbs")
+
+
+st.subheader("Latest weigh-in")
+
+# Custom styled div that looks similar to st.metric but with forced light color
+st.markdown(
+    f"""
+    <div style="
+        font-size: 3rem;
+        font-weight: 700;
+        color: #f0f0f0;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        background-color: #262730;
+        width: fit-content;
+        ">
+        {latest_weight} kg
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+
+
 
 
 
