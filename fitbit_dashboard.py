@@ -6,18 +6,6 @@ import plotly.graph_objects as go
 import json
 import os
 
-st.markdown(
-    """
-    <style>
-    /* Change latest weigh-in metric value color to light */
-    div[data-testid="metric-container"] > div:nth-child(2) {
-        color: #f0f0f0 !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
 # ---- Fitbit OAuth2 Credentials (replace with yours) ----
 CLIENT_ID = st.secrets["FITBIT_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["FITBIT_CLIENT_SECRET"]
