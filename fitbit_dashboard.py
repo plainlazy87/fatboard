@@ -3,7 +3,7 @@ import requests
 import json
 import os
 import time
-import pandas as pd  # <--- add this line
+import pandas as pd
 from datetime import datetime, timedelta
 
 def kg_to_lbs(kg):
@@ -12,9 +12,10 @@ def kg_to_lbs(kg):
 # Safe rerun function to support multiple Streamlit versions/environments
 def rerun():
     try:
-        st.experimental_rerun()
+        st.rerun()
     except AttributeError:
-        raise RuntimeError("Trigger rerun")
+        st.success("Authorization complete. Please manually refresh the page.")
+        st.stop()
 
 # ---- Fitbit OAuth2 Credentials ----
 CLIENT_ID = st.secrets["FITBIT_CLIENT_ID"]
@@ -84,7 +85,6 @@ def get_valid_access_token():
     if not tokens:
         return None
 
-    # Refresh if expired or about to expire in 60 seconds
     if int(time.time()) >= tokens.get("expires_at", 0) - 60:
         tokens = refresh_token(tokens["refresh_token"])
         if not tokens:
@@ -132,7 +132,7 @@ def main():
         if auth_code:
             tokens = exchange_code_for_tokens(auth_code)
             if tokens:
-                st.success("Authorization successful! Tokens saved. Reloading...")
+                st.success("Authorization successful! Reloading app...")
                 rerun()
     else:
         access_token = get_valid_access_token()
