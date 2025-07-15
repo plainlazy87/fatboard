@@ -1,10 +1,14 @@
 import streamlit as st
 import requests
-import pandas as pd
-from datetime import datetime, timedelta
 import json
 import os
 import time
+from datetime import datetime, timedelta
+from streamlit.runtime.scriptrunner import ScriptRerunException
+
+# Custom rerun function to replace deprecated st.experimental_rerun()
+def rerun():
+    raise ScriptRerunException
 
 # ---- Fitbit OAuth2 Credentials ----
 CLIENT_ID = st.secrets["FITBIT_CLIENT_ID"]
@@ -74,8 +78,8 @@ def get_valid_access_token():
     if not tokens:
         return None
 
+    # Refresh if expired or about to expire in 60 seconds
     if int(time.time()) >= tokens.get("expires_at", 0) - 60:
-        # Token expired or about to expire, refresh it
         tokens = refresh_access_token(tokens["refresh_token"])
         if not tokens:
             return None
@@ -110,9 +114,6 @@ def fetch_weight_data(access_token):
 
     return {"weight": all_data}
 
-
-# --- Streamlit UI logic for authorization and fetching ---
-
 def main():
     st.title("FatBoard Fitbit Weight Dashboard")
 
@@ -126,7 +127,7 @@ def main():
             tokens = exchange_code_for_tokens(auth_code)
             if tokens:
                 st.success("Authorization successful! Tokens saved. Reloading...")
-                st.experimental_rerun()
+                rerun()  # <-- use custom rerun()
     else:
         access_token = get_valid_access_token()
         if access_token:
@@ -137,10 +138,11 @@ def main():
             st.error("Failed to get a valid access token. Please delete the token file and reauthorize.")
             if os.path.exists(TOKEN_FILE):
                 os.remove(TOKEN_FILE)
-                st.experimental_rerun()
+                rerun()
 
 if __name__ == "__main__":
     main()
+
 
 # ---------------------------------------------------------------------------------------------------------------------
 # ---- Streamlit App ----
