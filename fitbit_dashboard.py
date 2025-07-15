@@ -1,28 +1,12 @@
 import streamlit as st
 import requests
-import json
-import os
-import time
 import pandas as pd
 from datetime import datetime, timedelta
+import plotly.graph_objects as go
+import json
+import os
 
-def kg_to_lbs(kg):
-    return kg * 2.20462
-
-def lbs_to_st_lbs(lbs):
-    stones = int(lbs // 14)
-    pounds = lbs % 14
-    return f"{stones} st {pounds:.1f} lbs"
-
-# Safe rerun function to support multiple Streamlit versions/environments
-def rerun():
-    try:
-        st.rerun()
-    except AttributeError:
-        st.success("Authorization complete. Please manually refresh the page.")
-        st.stop()
-
-# ---- Fitbit OAuth2 Credentials ----
+# ---- Fitbit OAuth2 Credentials (replace with yours) ----
 CLIENT_ID = st.secrets["FITBIT_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["FITBIT_CLIENT_SECRET"]
 REDIRECT_URI = "https://fatboard.streamlit.app"
@@ -44,9 +28,20 @@ def load_tokens():
     if os.path.exists(TOKEN_FILE):
         with open(TOKEN_FILE, "r") as f:
             return json.load(f)
-    return None
+    return {}
 
-def exchange_code_for_tokens(code):
+def kg_to_lbs(kg):
+    return kg * 2.20462
+
+def lbs_to_st_lbs(lbs):
+    stn = int(lbs // 14)
+    rem_lbs = lbs % 14
+    return f"{stn}st {rem_lbs:.1f}lbs"
+
+def st_to_lbs(stone):
+    return stone * 14
+
+def get_token_from_code(code):
     response = requests.post(
         TOKEN_URL,
         data={
@@ -57,14 +52,7 @@ def exchange_code_for_tokens(code):
         },
         auth=(CLIENT_ID, CLIENT_SECRET),
     )
-    if response.status_code == 200:
-        tokens = response.json()
-        tokens["expires_at"] = int(time.time()) + tokens["expires_in"]
-        save_tokens(tokens)
-        return tokens
-    else:
-        st.error(f"Failed to exchange code: {response.text}")
-        return None
+    return response.json()
 
 def refresh_token(refresh_token):
     response = requests.post(
@@ -76,26 +64,7 @@ def refresh_token(refresh_token):
         },
         auth=(CLIENT_ID, CLIENT_SECRET),
     )
-    if response.status_code == 200:
-        tokens = response.json()
-        tokens["expires_at"] = int(time.time()) + tokens["expires_in"]
-        save_tokens(tokens)
-        return tokens
-    else:
-        st.error(f"Failed to refresh token: {response.text}")
-        return None
-
-def get_valid_access_token():
-    tokens = load_tokens()
-    if not tokens:
-        return None
-
-    if int(time.time()) >= tokens.get("expires_at", 0) - 60:
-        tokens = refresh_token(tokens["refresh_token"])
-        if not tokens:
-            return None
-
-    return tokens["access_token"]
+    return response.json()
 
 def fetch_weight_data(access_token):
     start_date = datetime(2025, 5, 12)
@@ -123,56 +92,7 @@ def fetch_weight_data(access_token):
 
         start_date = chunk_end + timedelta(days=1)
 
-    return all_data
-
-def main():
-    st.title("FatBoard Fitbit Weight Dashboard")
-
-    tokens = load_tokens()
-
-    if not tokens:
-        st.write("Please authorize the app by following these steps:")
-        st.markdown(f"1. Go to this URL and log in:\n\n`{AUTH_URL}`")
-        auth_code = st.text_input("Enter the authorization code here:", type="password")
-        if auth_code:
-            tokens = exchange_code_for_tokens(auth_code)
-            if tokens:
-                st.success("Authorization successful! Reloading app...")
-                rerun()
-    else:
-        access_token = get_valid_access_token()
-        if access_token:
-            raw_data = fetch_weight_data(access_token)
-            if not raw_data:
-                st.warning("No weight data available.")
-                return
-
-            # Convert to DataFrame
-            df = pd.DataFrame(raw_data)
-            df["date"] = pd.to_datetime(df["date"])
-            df = df.sort_values("date")
-
-            df["weight_lbs"] = df["weight"].apply(kg_to_lbs)
-            df["weight_stlbs"] = df["weight_lbs"].apply(lbs_to_st_lbs)
-
-            st.subheader("Weight Log")
-            st.dataframe(df[["date", "weight", "weight_lbs", "weight_stlbs"]].rename(columns={
-                "weight": "Weight (kg)",
-                "weight_lbs": "Weight (lbs)",
-                "weight_stlbs": "Weight (st/lbs)"
-            }))
-
-            st.subheader("Weight Over Time")
-            st.line_chart(df.set_index("date")["weight_lbs"])
-        else:
-            st.error("Failed to get a valid access token. Please delete the token file and reauthorize.")
-            if os.path.exists(TOKEN_FILE):
-                os.remove(TOKEN_FILE)
-                rerun()
-
-if __name__ == "__main__":
-    main()
-
+    return {"weight": all_data}
 
 # ---------------------------------------------------------------------------------------------------------------------
 # ---- Streamlit App ----
