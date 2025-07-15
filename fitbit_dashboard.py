@@ -2,11 +2,11 @@ import streamlit as st
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
-import plotly.graph_objects as go
 import json
 import os
+import time
 
-# ---- Fitbit OAuth2 Credentials (replace with yours) ----
+# ---- Fitbit OAuth2 Credentials ----
 CLIENT_ID = st.secrets["FITBIT_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["FITBIT_CLIENT_SECRET"]
 REDIRECT_URI = "https://fatboard.streamlit.app"
@@ -28,20 +28,9 @@ def load_tokens():
     if os.path.exists(TOKEN_FILE):
         with open(TOKEN_FILE, "r") as f:
             return json.load(f)
-    return {}
+    return None
 
-def kg_to_lbs(kg):
-    return kg * 2.20462
-
-def lbs_to_st_lbs(lbs):
-    stn = int(lbs // 14)
-    rem_lbs = lbs % 14
-    return f"{stn}st {rem_lbs:.1f}lbs"
-
-def st_to_lbs(stone):
-    return stone * 14
-
-def get_token_from_code(code):
+def exchange_code_for_tokens(code):
     response = requests.post(
         TOKEN_URL,
         data={
@@ -52,9 +41,16 @@ def get_token_from_code(code):
         },
         auth=(CLIENT_ID, CLIENT_SECRET),
     )
-    return response.json()
+    if response.status_code == 200:
+        tokens = response.json()
+        tokens["expires_at"] = int(time.time()) + tokens["expires_in"]
+        save_tokens(tokens)
+        return tokens
+    else:
+        st.error(f"Failed to exchange code: {response.text}")
+        return None
 
-def refresh_token(refresh_token):
+def refresh_access_token(refresh_token):
     response = requests.post(
         TOKEN_URL,
         data={
@@ -64,7 +60,27 @@ def refresh_token(refresh_token):
         },
         auth=(CLIENT_ID, CLIENT_SECRET),
     )
-    return response.json()
+    if response.status_code == 200:
+        tokens = response.json()
+        tokens["expires_at"] = int(time.time()) + tokens["expires_in"]
+        save_tokens(tokens)
+        return tokens
+    else:
+        st.error(f"Failed to refresh token: {response.text}")
+        return None
+
+def get_valid_access_token():
+    tokens = load_tokens()
+    if not tokens:
+        return None
+
+    if int(time.time()) >= tokens.get("expires_at", 0) - 60:
+        # Token expired or about to expire, refresh it
+        tokens = refresh_access_token(tokens["refresh_token"])
+        if not tokens:
+            return None
+
+    return tokens["access_token"]
 
 def fetch_weight_data(access_token):
     start_date = datetime(2025, 5, 12)
@@ -94,6 +110,39 @@ def fetch_weight_data(access_token):
 
     return {"weight": all_data}
 
+
+# --- Streamlit UI logic for authorization and fetching ---
+
+def main():
+    st.title("FatBoard Fitbit Weight Dashboard")
+
+    tokens = load_tokens()
+
+    if not tokens:
+        st.write("Please authorize the app by following these steps:")
+        st.markdown(f"1. Go to this URL and log in:\n\n`{AUTH_URL}`")
+        auth_code = st.text_input("Enter the authorization code here:", type="password")
+        if auth_code:
+            tokens = exchange_code_for_tokens(auth_code)
+            if tokens:
+                st.success("Authorization successful! Tokens saved. Reloading...")
+                st.experimental_rerun()
+    else:
+        access_token = get_valid_access_token()
+        if access_token:
+            data = fetch_weight_data(access_token)
+            st.write("Fetched weight data:")
+            st.json(data)
+        else:
+            st.error("Failed to get a valid access token. Please delete the token file and reauthorize.")
+            if os.path.exists(TOKEN_FILE):
+                os.remove(TOKEN_FILE)
+                st.experimental_rerun()
+
+if __name__ == "__main__":
+    main()
+
+# ---------------------------------------------------------------------------------------------------------------------
 # ---- Streamlit App ----
 st.set_page_config(page_title="Fitbit Weight Loss Dashboard", layout="centered")
 
