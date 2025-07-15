@@ -9,6 +9,11 @@ from datetime import datetime, timedelta
 def kg_to_lbs(kg):
     return kg * 2.20462
 
+def lbs_to_st_lbs(lbs):
+    stones = int(lbs // 14)
+    pounds = lbs % 14
+    return f"{stones} st {pounds:.1f} lbs"
+
 # Safe rerun function to support multiple Streamlit versions/environments
 def rerun():
     try:
@@ -118,7 +123,7 @@ def fetch_weight_data(access_token):
 
         start_date = chunk_end + timedelta(days=1)
 
-    return {"weight": all_data}
+    return all_data
 
 def main():
     st.title("FatBoard Fitbit Weight Dashboard")
@@ -137,9 +142,28 @@ def main():
     else:
         access_token = get_valid_access_token()
         if access_token:
-            data = fetch_weight_data(access_token)
-            st.write("Fetched weight data:")
-            st.json(data)
+            raw_data = fetch_weight_data(access_token)
+            if not raw_data:
+                st.warning("No weight data available.")
+                return
+
+            # Convert to DataFrame
+            df = pd.DataFrame(raw_data)
+            df["date"] = pd.to_datetime(df["date"])
+            df = df.sort_values("date")
+
+            df["weight_lbs"] = df["weight"].apply(kg_to_lbs)
+            df["weight_stlbs"] = df["weight_lbs"].apply(lbs_to_st_lbs)
+
+            st.subheader("Weight Log")
+            st.dataframe(df[["date", "weight", "weight_lbs", "weight_stlbs"]].rename(columns={
+                "weight": "Weight (kg)",
+                "weight_lbs": "Weight (lbs)",
+                "weight_stlbs": "Weight (st/lbs)"
+            }))
+
+            st.subheader("Weight Over Time")
+            st.line_chart(df.set_index("date")["weight_lbs"])
         else:
             st.error("Failed to get a valid access token. Please delete the token file and reauthorize.")
             if os.path.exists(TOKEN_FILE):
