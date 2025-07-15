@@ -146,7 +146,6 @@ if __name__ == "__main__":
     main()
 
 
-
 # ---------------------------------------------------------------------------------------------------------------------
 # ---- Streamlit App ----
 st.set_page_config(page_title="Fitbit Weight Loss Dashboard", layout="centered")
