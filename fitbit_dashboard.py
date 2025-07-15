@@ -6,6 +6,9 @@ import time
 import pandas as pd  # <--- add this line
 from datetime import datetime, timedelta
 
+def kg_to_lbs(kg):
+    return kg * 2.20462
+
 # Safe rerun function to support multiple Streamlit versions/environments
 def rerun():
     try:
