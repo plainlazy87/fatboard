@@ -7,20 +7,6 @@ import json
 import os
 
 
-st.markdown(
-    """
-    <style>
-    /* Make metric value text light */
-    .stMetric-value {
-        color: #f0f0f0 !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-
-
 
 
 # ---- Fitbit OAuth2 Credentials (replace with yours) ----
@@ -230,10 +216,17 @@ else:
     countdown_days = None
 
 # ---- Metrics Display ----
-st.subheader("📌 Latest Weigh-In")
-st.metric("Latest Weight", lbs_to_st_lbs(current_weight), delta=f"{current_weight - start_weight:.1f} lbs")
+#st.subheader("📌 Latest Weigh-In")
+#st.metric("Latest Weight", lbs_to_st_lbs(current_weight), delta=f"{current_weight - start_weight:.1f} lbs")
 
+st.subheader("Latest weigh-in")
 
+safe_weight = str(latest_weight) if latest_weight is not None else "N/A"
+
+st.markdown(
+    f'<div style="font-size:48px; font-weight:bold; color:#f0f0f0;">{safe_weight} kg</div>',
+    unsafe_allow_html=True,
+)
 
 
 
