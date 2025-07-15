@@ -3,6 +3,7 @@ import requests
 import json
 import os
 import time
+import pandas as pd  # <--- add this line
 from datetime import datetime, timedelta
 
 # Safe rerun function to support multiple Streamlit versions/environments
