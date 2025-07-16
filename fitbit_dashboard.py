@@ -143,7 +143,6 @@ st.markdown(
 
 st.title("📉 Leon's Weight Loss Dashboard")
 
-# === TOKEN HANDLING ===
 query_params = st.query_params
 code = query_params.get("code", [None])[0]
 
@@ -151,12 +150,10 @@ tokens = load_tokens()
 access_token = tokens.get("access_token") if tokens else None
 refresh_token_val = tokens.get("refresh_token") if tokens else None
 
-# If no access token and no code, prompt login
 if not access_token and not code:
     st.markdown(f"[🔒 Connect your Fitbit account]({AUTH_URL})")
     st.stop()
 
-# If code is present and we don't have access_token yet
 if code and not access_token:
     tokens = get_token_from_code(code)
     if "access_token" not in tokens:
@@ -166,10 +163,10 @@ if code and not access_token:
     save_tokens(tokens)
     access_token = tokens["access_token"]
     refresh_token_val = tokens["refresh_token"]
-    st.experimental_set_query_params()  # Clear the code param from URL
-    st.experimental_rerun()  # Restart app to avoid reusing code
+    # CLEAR the code from URL immediately to prevent reuse error
+    st.experimental_set_query_params()
+    st.experimental_rerun()
 
-# Refresh token if available
 if refresh_token_val:
     refreshed = refresh_token(refresh_token_val)
     if "access_token" in refreshed:
@@ -182,7 +179,6 @@ if refresh_token_val:
         delete_tokens()
         st.experimental_rerun()
 
-# === DATA FETCHING ===
 data = fetch_weight_data(access_token)
 
 if "weight" not in data or len(data["weight"]) == 0:
@@ -223,7 +219,6 @@ else:
     goal_date = None
     countdown_days = None
 
-# Optional logout button
 if st.button("🚪 Logout and reset"):
     delete_tokens()
     st.experimental_rerun()
