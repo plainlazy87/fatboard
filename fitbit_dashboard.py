@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 import json
 import os
 
-# ---- Fitbit OAuth2 Credentials (replace with yours) ----
+# ---- Fitbit OAuth2 Credentials ----
 CLIENT_ID = st.secrets["FITBIT_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["FITBIT_CLIENT_SECRET"]
 REDIRECT_URI = "https://fatboard.streamlit.app"
@@ -29,6 +29,11 @@ def load_tokens():
         with open(TOKEN_FILE, "r") as f:
             return json.load(f)
     return {}
+
+
+def delete_token_file():
+    if os.path.exists(TOKEN_FILE):
+        os.remove(TOKEN_FILE)
 
 
 def kg_to_lbs(kg):
@@ -98,7 +103,6 @@ def fetch_weight_data(access_token):
 # ---- Streamlit App Setup ----
 st.set_page_config(page_title="Fitbit Weight Loss Dashboard", layout="centered")
 
-# Custom CSS (unchanged)
 st.markdown(
     """
     <style>
@@ -112,52 +116,56 @@ st.markdown(
 
 st.title("Fat Fat Fat")
 
-# === Updated token handling ===
 code = st.query_params.get("code", [None])[0]
-
 tokens = load_tokens()
 access_token = tokens.get("access_token")
 refresh_token_val = tokens.get("refresh_token")
 
+# === If not connected, offer login link ===
 if not access_token and not code:
-    st.markdown(f"[Connect your Fitbit account]({AUTH_URL})")
+    st.markdown(f"[👉 Connect your Fitbit account]({AUTH_URL})")
     st.stop()
 
-if code:
+# === If returning from Fitbit login with code ===
+if code and not access_token:
+    st.write("🔁 Exchanging Fitbit code for token...")
     tokens = get_token_from_code(code)
+
     if "access_token" in tokens:
         save_tokens(tokens)
         access_token = tokens["access_token"]
         refresh_token_val = tokens.get("refresh_token")
+        st.success("✅ Fitbit connected successfully!")
     else:
-        if os.path.exists(TOKEN_FILE):
-            os.remove(TOKEN_FILE)
-        st.error("❌ Failed to authenticate with Fitbit. Please try connecting again.")
-        st.markdown(f"[Click here to reconnect your Fitbit account]({AUTH_URL})")
+        delete_token_file()
+        st.error("❌ Fitbit authentication failed.")
+        st.markdown(f"[Click here to try connecting again]({AUTH_URL})")
         st.json(tokens)
         st.stop()
 
-elif refresh_token_val:
+# === Try to refresh token if needed ===
+elif refresh_token_val and not access_token:
+    st.write("🔁 Refreshing Fitbit access token...")
     new_tokens = refresh_access_token(refresh_token_val)
     if "access_token" in new_tokens:
-        tokens = new_tokens
-        save_tokens(tokens)
-        access_token = tokens["access_token"]
-        refresh_token_val = tokens.get("refresh_token")
+        save_tokens(new_tokens)
+        access_token = new_tokens["access_token"]
+        refresh_token_val = new_tokens.get("refresh_token")
     else:
-        if os.path.exists(TOKEN_FILE):
-            os.remove(TOKEN_FILE)
-        st.error("❌ Failed to refresh Fitbit token. Please reconnect.")
-        st.markdown(f"[Click here to reconnect your Fitbit account]({AUTH_URL})")
+        delete_token_file()
+        st.error("❌ Token refresh failed.")
+        st.markdown(f"[Click here to try connecting again]({AUTH_URL})")
         st.json(new_tokens)
         st.stop()
 
+# === Get Fitbit data ===
 data = fetch_weight_data(access_token)
 if "weight" not in data or len(data["weight"]) == 0:
-    st.error("No weight data found. Have you logged your weight recently in the Fitbit app?")
+    st.error("No weight data found. Have you logged your weight in the Fitbit app recently?")
     st.json(data)
     st.stop()
 
+# === Data processing ===
 weights = data["weight"]
 df = pd.DataFrame(weights)
 df["dateTime"] = pd.to_datetime(df["date"])
@@ -166,6 +174,7 @@ df["date"] = df["dateTime"].dt.strftime("%d-%m-%Y")
 df["weight_lbs"] = df["weight"].apply(kg_to_lbs)
 df["weight_stlbs"] = df["weight_lbs"].apply(lbs_to_st_lbs)
 
+# === Journey calculations ===
 journey_start_date = datetime(2025, 5, 12)
 df_after_start = df[df["dateTime"] >= journey_start_date]
 if df_after_start.empty:
@@ -188,6 +197,7 @@ if current_weight > goal and avg_per_day > 0:
 else:
     goal_date = None
     countdown_days = None
+
 
 
 
