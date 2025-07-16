@@ -158,16 +158,16 @@ if not access_token and not code:
 
 # If code is present and we don't have access_token yet
 if code and not access_token:
-    new_tokens = get_token_from_code(code)
-    if "access_token" not in new_tokens:
+    tokens = get_token_from_code(code)
+    if "access_token" not in tokens:
         st.error("❌ Failed to authenticate with Fitbit.")
-        st.json(new_tokens)
+        st.json(tokens)
         st.stop()
-    save_tokens(new_tokens)
-    tokens = new_tokens
+    save_tokens(tokens)
     access_token = tokens["access_token"]
     refresh_token_val = tokens["refresh_token"]
-    st.experimental_set_query_params()  # clear ?code= from URL
+    st.experimental_set_query_params()  # Clear the code param from URL
+    st.experimental_rerun()  # Restart app to avoid reusing code
 
 # Refresh token if available
 if refresh_token_val:
@@ -223,10 +223,23 @@ else:
     goal_date = None
     countdown_days = None
 
-# Optionally, add logout button
+# Optional logout button
 if st.button("🚪 Logout and reset"):
     delete_tokens()
     st.experimental_rerun()
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # ---- Metrics Display ----
