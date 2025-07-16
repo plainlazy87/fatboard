@@ -123,7 +123,8 @@ st.markdown(
 st.title("Fat Fat Fat")
 
 # Get authorization code from query params
-code = st.experimental_get_query_params().get("code", [None])[0]
+#code = st.experimental_get_query_params().get("code", [None])[0]
+code = st.query_params.get("code", [None])[0]
 
 tokens = load_tokens()
 access_token = tokens.get("access_token")
