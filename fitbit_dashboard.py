@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
+import plotly.graph_objects as go
 import json
 import os
 
