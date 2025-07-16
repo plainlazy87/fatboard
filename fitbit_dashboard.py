@@ -112,7 +112,7 @@ st.markdown(
 
 st.title("Fat Fat Fat")
 
-# === Updated to new query param syntax ===
+# === Updated token handling ===
 code = st.query_params.get("code", [None])[0]
 
 tokens = load_tokens()
@@ -123,22 +123,34 @@ if not access_token and not code:
     st.markdown(f"[Connect your Fitbit account]({AUTH_URL})")
     st.stop()
 
-if code and not access_token:
+if code:
     tokens = get_token_from_code(code)
-    if "access_token" not in tokens:
-        st.error("❌ Failed to authenticate with Fitbit.")
-        st.json(tokens)
-        st.stop()
-    save_tokens(tokens)
-    access_token = tokens["access_token"]
-    refresh_token_val = tokens.get("refresh_token")
-
-if refresh_token_val:
-    tokens = refresh_access_token(refresh_token_val)
     if "access_token" in tokens:
         save_tokens(tokens)
         access_token = tokens["access_token"]
         refresh_token_val = tokens.get("refresh_token")
+    else:
+        if os.path.exists(TOKEN_FILE):
+            os.remove(TOKEN_FILE)
+        st.error("❌ Failed to authenticate with Fitbit. Please try connecting again.")
+        st.markdown(f"[Click here to reconnect your Fitbit account]({AUTH_URL})")
+        st.json(tokens)
+        st.stop()
+
+elif refresh_token_val:
+    new_tokens = refresh_access_token(refresh_token_val)
+    if "access_token" in new_tokens:
+        tokens = new_tokens
+        save_tokens(tokens)
+        access_token = tokens["access_token"]
+        refresh_token_val = tokens.get("refresh_token")
+    else:
+        if os.path.exists(TOKEN_FILE):
+            os.remove(TOKEN_FILE)
+        st.error("❌ Failed to refresh Fitbit token. Please reconnect.")
+        st.markdown(f"[Click here to reconnect your Fitbit account]({AUTH_URL})")
+        st.json(new_tokens)
+        st.stop()
 
 data = fetch_weight_data(access_token)
 if "weight" not in data or len(data["weight"]) == 0:
@@ -176,6 +188,7 @@ if current_weight > goal and avg_per_day > 0:
 else:
     goal_date = None
     countdown_days = None
+
 
 
 
