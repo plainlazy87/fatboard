@@ -6,21 +6,16 @@ import plotly.graph_objects as go
 import json
 import os
 
-
-
-
 # ---- Fitbit OAuth2 Credentials (replace with yours) ----
 CLIENT_ID = st.secrets["FITBIT_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["FITBIT_CLIENT_SECRET"]
 REDIRECT_URI = "https://fatboard.streamlit.app"
 TOKEN_URL = "https://api.fitbit.com/oauth2/token"
-
 AUTH_URL = (
     f"https://www.fitbit.com/oauth2/authorize?"
     f"response_type=code&client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}"
     f"&scope=weight&expires_in=604800&prompt=login"
 )
-
 TOKEN_FILE = "fitbit_tokens.json"
 
 def save_tokens(tokens):
@@ -73,88 +68,55 @@ def fetch_weight_data(access_token):
     start_date = datetime(2025, 5, 12)
     end_date = datetime.today()
     all_data = []
-
     headers = {"Authorization": f"Bearer {access_token}"}
-
     while start_date <= end_date:
         chunk_end = min(start_date + timedelta(days=30), end_date)
         url = (
             f"https://api.fitbit.com/1/user/-/body/log/weight/date/"
             f"{start_date.strftime('%Y-%m-%d')}/{chunk_end.strftime('%Y-%m-%d')}.json"
         )
-
         response = requests.get(url, headers=headers)
         if response.status_code != 200:
             st.error(f"Error fetching data: {response.status_code}")
             st.json(response.json())
             break
-
         data_chunk = response.json()
         if "weight" in data_chunk:
             all_data.extend(data_chunk["weight"])
-
         start_date = chunk_end + timedelta(days=1)
-
     return {"weight": all_data}
 
 # ---------------------------------------------------------------------------------------------------------------------
 # ---- Streamlit App ----
 st.set_page_config(page_title="Fitbit Weight Loss Dashboard", layout="centered")
 
-# Custom CSS (unchanged) ...
+# Custom CSS (unchanged)
 st.markdown(
     """
     <style>
-    .stApp {
-        background-color: #2E2E2E;
-        color: white;
-    }
-    .section-title {
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        font-size: 22px;
-        font-weight: 600;
-        margin-bottom: 10px;
-    }
-    .plotly-graph-div {
-        background-color: #3C3C3C !important;
-        border-radius: 8px;
-        padding: 10px;
-    }
-    .legend-bg {
-        background-color: #3C3C3C;
-        padding: 10px;
-        border-radius: 8px;
-        color: white;
-        font-weight: 600;
-        width: 160px;
-        margin-left: 15px;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    }
-    .metric-container {
-        background-color: #3C3C3C;
-        border-radius: 10px;
-        padding: 10px;
-        text-align: center;
+    .css-1v3fvcr {
+        display: none;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-st.title("📉 Leon's Weight Loss Dashboard")
+st.title("Leon's Weight Loss Dashboard")
 
 # === IMPORTANT FIX HERE ===
 # Use ONLY experimental_get_query_params for reading query params
-query_params = st.query_params
+query_params = st.experimental_get_query_params()
 code = query_params.get("code", [None])[0]
 
 # Load tokens from file/session
 tokens = load_tokens()
-access_token = tokens.get("access_token") if tokens else None
+access_token = tokens.get("access_token")
+refresh_token = tokens.get("refresh_token")
 
 # If no access token and no code, show login link and stop
 if not access_token and not code:
-    st.markdown(f"[🔒 Connect your Fitbit account]({AUTH_URL})")
+    st.markdown(f"[Connect your Fitbit account]({AUTH_URL})")
     st.stop()
 
 # If code is present (first auth), exchange for tokens and save
@@ -166,17 +128,17 @@ if code and not access_token:
         st.stop()
     save_tokens(tokens)
     access_token = tokens["access_token"]
+    refresh_token = tokens.get("refresh_token")
 
 # If tokens have refresh token, try to refresh
-if tokens and "refresh_token" in tokens:
-    tokens = refresh_token(tokens["refresh_token"])
+if refresh_token:
+    tokens = refresh_token(refresh_token)
     if "access_token" in tokens:
         save_tokens(tokens)
         access_token = tokens["access_token"]
 
 # Fetch data
 data = fetch_weight_data(access_token)
-
 if "weight" not in data or len(data["weight"]) == 0:
     st.error("No weight data found. Have you logged your weight recently in the Fitbit app?")
     st.json(data)
@@ -192,7 +154,6 @@ df["weight_stlbs"] = df["weight_lbs"].apply(lbs_to_st_lbs)
 
 journey_start_date = datetime(2025, 5, 12)
 df_after_start = df[df["dateTime"] >= journey_start_date]
-
 if df_after_start.empty:
     st.error("No weight data found on or after your journey start date (12th May 2025).")
     st.stop()
@@ -206,7 +167,6 @@ avg_per_day = loss / days if days > 0 else 0
 
 goal_stone = 15
 goal = st_to_lbs(goal_stone)
-
 if current_weight > goal and avg_per_day > 0:
     days_left = (current_weight - goal) / avg_per_day
     goal_date = datetime.today() + timedelta(days=days_left)
@@ -214,6 +174,17 @@ if current_weight > goal and avg_per_day > 0:
 else:
     goal_date = None
     countdown_days = None
+
+
+
+
+
+
+
+
+
+
+
 
 # ---- Metrics Display ----
 st.subheader("📌 Latest Weigh-In")
