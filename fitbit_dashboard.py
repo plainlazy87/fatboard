@@ -177,35 +177,6 @@ else:
     goal_date = None
     countdown_days = None
 
-# ---- Metrics Display ----
-st.subheader("Latest Weigh-In")
-st.metric("Latest Weight", lbs_to_st_lbs(current_weight))
-st.metric("Weight Lost", f"{loss:.1f} lbs")
-st.metric("Days Since Start", days)
-if countdown_days is not None:
-    st.metric("Days to Goal", countdown_days)
-    st.metric("Estimated Goal Date", goal_date.strftime("%d-%m-%Y") if goal_date else "N/A")
-
-# ---- Weight Trend Chart ----
-fig = go.Figure()
-fig.add_trace(
-    go.Scatter(
-        x=df["dateTime"],
-        y=df["weight_lbs"],
-        mode="lines+markers",
-        name="Weight",
-        line=dict(color="blue"),
-    )
-)
-fig.update_layout(
-    title="Weight Trend",
-    xaxis_title="Date",
-    yaxis_title="Weight (lbs)",
-    template="plotly_dark",
-)
-st.plotly_chart(fig)
-
-
 
 
 
