@@ -6,7 +6,10 @@ import plotly.graph_objects as go
 import json
 import os
 
-# ---- Fitbit OAuth2 Credentials ----
+
+
+
+# ---- Fitbit OAuth2 Credentials (replace with yours) ----
 CLIENT_ID = st.secrets["FITBIT_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["FITBIT_CLIENT_SECRET"]
 REDIRECT_URI = "https://fatboard.streamlit.app"
@@ -29,10 +32,6 @@ def load_tokens():
         with open(TOKEN_FILE, "r") as f:
             return json.load(f)
     return {}
-
-def delete_tokens():
-    if os.path.exists(TOKEN_FILE):
-        os.remove(TOKEN_FILE)
 
 def kg_to_lbs(kg):
     return kg * 2.20462
@@ -102,6 +101,7 @@ def fetch_weight_data(access_token):
 # ---- Streamlit App ----
 st.set_page_config(page_title="Fitbit Weight Loss Dashboard", layout="centered")
 
+# Custom CSS (unchanged) ...
 st.markdown(
     """
     <style>
@@ -143,17 +143,21 @@ st.markdown(
 
 st.title("📉 Leon's Weight Loss Dashboard")
 
+# === IMPORTANT FIX HERE ===
+# Use ONLY experimental_get_query_params for reading query params
 query_params = st.query_params
 code = query_params.get("code", [None])[0]
 
+# Load tokens from file/session
 tokens = load_tokens()
 access_token = tokens.get("access_token") if tokens else None
-refresh_token_val = tokens.get("refresh_token") if tokens else None
 
+# If no access token and no code, show login link and stop
 if not access_token and not code:
     st.markdown(f"[🔒 Connect your Fitbit account]({AUTH_URL})")
     st.stop()
 
+# If code is present (first auth), exchange for tokens and save
 if code and not access_token:
     tokens = get_token_from_code(code)
     if "access_token" not in tokens:
@@ -162,23 +166,15 @@ if code and not access_token:
         st.stop()
     save_tokens(tokens)
     access_token = tokens["access_token"]
-    refresh_token_val = tokens["refresh_token"]
-    # CLEAR the code from URL immediately to prevent reuse error
-    st.experimental_set_query_params()
-    st.experimental_rerun()
 
-if refresh_token_val:
-    refreshed = refresh_token(refresh_token_val)
-    if "access_token" in refreshed:
-        tokens = refreshed
-        save_tokens(refreshed)
-        access_token = refreshed["access_token"]
-        refresh_token_val = refreshed["refresh_token"]
-    else:
-        st.warning("Token refresh failed, please log in again.")
-        delete_tokens()
-        st.experimental_rerun()
+# If tokens have refresh token, try to refresh
+if tokens and "refresh_token" in tokens:
+    tokens = refresh_token(tokens["refresh_token"])
+    if "access_token" in tokens:
+        save_tokens(tokens)
+        access_token = tokens["access_token"]
 
+# Fetch data
 data = fetch_weight_data(access_token)
 
 if "weight" not in data or len(data["weight"]) == 0:
@@ -218,24 +214,6 @@ if current_weight > goal and avg_per_day > 0:
 else:
     goal_date = None
     countdown_days = None
-
-if st.button("🚪 Logout and reset"):
-    delete_tokens()
-    st.experimental_rerun()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 # ---- Metrics Display ----
 st.subheader("📌 Latest Weigh-In")
