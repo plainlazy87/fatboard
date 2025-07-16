@@ -110,7 +110,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("Leon's Weight Loss Dashboard")
+st.title("Fat Fat Fat")
 
 # === Updated to new query param syntax ===
 code = st.query_params.get("code", [None])[0]
