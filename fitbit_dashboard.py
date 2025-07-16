@@ -18,9 +18,11 @@ AUTH_URL = (
 )
 TOKEN_FILE = "fitbit_tokens.json"
 
+
 def save_tokens(tokens):
     with open(TOKEN_FILE, "w") as f:
         json.dump(tokens, f)
+
 
 def load_tokens():
     if os.path.exists(TOKEN_FILE):
@@ -28,16 +30,20 @@ def load_tokens():
             return json.load(f)
     return {}
 
+
 def kg_to_lbs(kg):
     return kg * 2.20462
+
 
 def lbs_to_st_lbs(lbs):
     stn = int(lbs // 14)
     rem_lbs = lbs % 14
     return f"{stn}st {rem_lbs:.1f}lbs"
 
+
 def st_to_lbs(stone):
     return stone * 14
+
 
 def get_token_from_code(code):
     response = requests.post(
@@ -52,7 +58,8 @@ def get_token_from_code(code):
     )
     return response.json()
 
-def refresh_token(refresh_token):
+
+def refresh_access_token(refresh_token):
     response = requests.post(
         TOKEN_URL,
         data={
@@ -63,6 +70,7 @@ def refresh_token(refresh_token):
         auth=(CLIENT_ID, CLIENT_SECRET),
     )
     return response.json()
+
 
 def fetch_weight_data(access_token):
     start_date = datetime(2025, 5, 12)
@@ -86,8 +94,8 @@ def fetch_weight_data(access_token):
         start_date = chunk_end + timedelta(days=1)
     return {"weight": all_data}
 
-# ---------------------------------------------------------------------------------------------------------------------
-# ---- Streamlit App ----
+
+# ---- Streamlit App Setup ----
 st.set_page_config(page_title="Fitbit Weight Loss Dashboard", layout="centered")
 
 # Custom CSS (unchanged)
@@ -104,22 +112,17 @@ st.markdown(
 
 st.title("Leon's Weight Loss Dashboard")
 
-# === IMPORTANT FIX HERE ===
-# Use ONLY experimental_get_query_params for reading query params
-query_params = st.experimental_get_query_params()
-code = query_params.get("code", [None])[0]
+# === Updated to new query param syntax ===
+code = st.query_params.get("code", [None])[0]
 
-# Load tokens from file/session
 tokens = load_tokens()
 access_token = tokens.get("access_token")
-refresh_token = tokens.get("refresh_token")
+refresh_token_val = tokens.get("refresh_token")
 
-# If no access token and no code, show login link and stop
 if not access_token and not code:
     st.markdown(f"[Connect your Fitbit account]({AUTH_URL})")
     st.stop()
 
-# If code is present (first auth), exchange for tokens and save
 if code and not access_token:
     tokens = get_token_from_code(code)
     if "access_token" not in tokens:
@@ -128,16 +131,15 @@ if code and not access_token:
         st.stop()
     save_tokens(tokens)
     access_token = tokens["access_token"]
-    refresh_token = tokens.get("refresh_token")
+    refresh_token_val = tokens.get("refresh_token")
 
-# If tokens have refresh token, try to refresh
-if refresh_token:
-    tokens = refresh_token(refresh_token)
+if refresh_token_val:
+    tokens = refresh_access_token(refresh_token_val)
     if "access_token" in tokens:
         save_tokens(tokens)
         access_token = tokens["access_token"]
+        refresh_token_val = tokens.get("refresh_token")
 
-# Fetch data
 data = fetch_weight_data(access_token)
 if "weight" not in data or len(data["weight"]) == 0:
     st.error("No weight data found. Have you logged your weight recently in the Fitbit app?")
@@ -175,7 +177,33 @@ else:
     goal_date = None
     countdown_days = None
 
+# ---- Metrics Display ----
+st.subheader("Latest Weigh-In")
+st.metric("Latest Weight", lbs_to_st_lbs(current_weight))
+st.metric("Weight Lost", f"{loss:.1f} lbs")
+st.metric("Days Since Start", days)
+if countdown_days is not None:
+    st.metric("Days to Goal", countdown_days)
+    st.metric("Estimated Goal Date", goal_date.strftime("%d-%m-%Y") if goal_date else "N/A")
 
+# ---- Weight Trend Chart ----
+fig = go.Figure()
+fig.add_trace(
+    go.Scatter(
+        x=df["dateTime"],
+        y=df["weight_lbs"],
+        mode="lines+markers",
+        name="Weight",
+        line=dict(color="blue"),
+    )
+)
+fig.update_layout(
+    title="Weight Trend",
+    xaxis_title="Date",
+    yaxis_title="Weight (lbs)",
+    template="plotly_dark",
+)
+st.plotly_chart(fig)
 
 
 
