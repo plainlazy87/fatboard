@@ -54,6 +54,7 @@ def get_token_from_code(code):
         "grant_type": "authorization_code",
         "code": code,
         "redirect_uri": REDIRECT_URI,
+        "client_id": CLIENT_ID,
     }
     response = requests.post(
         TOKEN_URL,
@@ -72,6 +73,7 @@ def refresh_access_token(refresh_token):
     data = {
         "grant_type": "refresh_token",
         "refresh_token": refresh_token,
+        "client_id": CLIENT_ID,
     }
     response = requests.post(
         TOKEN_URL,
@@ -122,18 +124,21 @@ st.markdown(
 
 st.title("Fat Fat Fat")
 
-# Get authorization code from query params
-#code = st.experimental_get_query_params().get("code", [None])[0]
-code = st.query_params.get("code", [None])[0]
+# ✅ Extract authorization code from query string (safe)
+query_params = st.experimental_get_query_params()
+code = query_params.get("code", [None])[0]
 
+# Load stored tokens
 tokens = load_tokens()
 access_token = tokens.get("access_token")
 refresh_token_val = tokens.get("refresh_token")
 
+# 🔗 Prompt user to authorize if no access token or code
 if not access_token and not code:
     st.markdown(f"[Connect your Fitbit account]({AUTH_URL})")
     st.stop()
 
+# 🔄 Exchange code for token if needed
 if code and not access_token:
     st.write("🔁 Exchanging Fitbit code for token...")
     tokens = get_token_from_code(code)
@@ -145,17 +150,17 @@ if code and not access_token:
     save_tokens(tokens)
     access_token = tokens["access_token"]
     refresh_token_val = tokens.get("refresh_token")
+    st.experimental_set_query_params()  # ✅ Clear query params after exchange
 
-    # --- CRITICAL FIX: clear 'code' param to avoid reusing expired authorization code ---
-    st.experimental_set_query_params()
-
-if refresh_token_val:
+# 🔄 Refresh access token if needed
+elif refresh_token_val:
     tokens = refresh_access_token(refresh_token_val)
     if "access_token" in tokens:
         save_tokens(tokens)
         access_token = tokens["access_token"]
         refresh_token_val = tokens.get("refresh_token")
 
+# 📊 Load and process weight data
 data = fetch_weight_data(access_token)
 if "weight" not in data or len(data["weight"]) == 0:
     st.error("No weight data found. Have you logged your weight recently in the Fitbit app?")
@@ -192,6 +197,7 @@ if current_weight > goal and avg_per_day > 0:
 else:
     goal_date = None
     countdown_days = None
+
 
 
 
