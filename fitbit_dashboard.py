@@ -125,8 +125,10 @@ st.markdown(
 st.title("Fat Fat Fat")
 
 # ✅ Extract authorization code from query string (safe)
-query_params = st.experimental_get_query_params()
-code = query_params.get("code", [None])[0]
+#query_params = st.experimental_get_query_params()
+#code = query_params.get("code", [None])[0]
+
+code = st.query_params.get("code", [None])[0]
 
 # Load stored tokens
 tokens = load_tokens()
