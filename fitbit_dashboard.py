@@ -3,6 +3,8 @@ import requests
 import pandas as pd
 from datetime import datetime, timedelta
 import json
+import plotly.graph_objects as go
+import os
 
 import firebase_admin
 from firebase_admin import credentials, firestore
