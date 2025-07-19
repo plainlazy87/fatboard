@@ -3,3 +3,4 @@ pandas
 requests
 plotly
 python-dotenv
+firebase-admin
