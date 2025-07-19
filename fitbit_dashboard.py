@@ -7,9 +7,12 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # ---- Initialize Firebase Admin SDK (only once) ----
+import copy
+
 if "firebase_app" not in st.session_state:
-    # st.secrets["firebase"] is already a dict; fix private_key newlines
-    firebase_cred_dict = st.secrets["firebase"]
+    # Make a copy of the firebase dict from secrets
+    firebase_cred_dict = copy.deepcopy(st.secrets["firebase"])
+    # Fix the multiline private_key formatting
     firebase_cred_dict["private_key"] = firebase_cred_dict["private_key"].replace("\\n", "\n").strip()
 
     cred = credentials.Certificate(firebase_cred_dict)
