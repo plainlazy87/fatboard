@@ -9,10 +9,11 @@ from firebase_admin import credentials, firestore
 
 # ---- Initialize Firebase Admin SDK (only once) ----
 if not firebase_admin._apps:
-    firebase_cred_dict = json.loads(json.dumps(st.secrets["firebase"]))
+    firebase_cred_dict = dict(st.secrets["firebase"])
     firebase_cred_dict["private_key"] = firebase_cred_dict["private_key"].replace("\\n", "\n").strip()
     cred = credentials.Certificate(firebase_cred_dict)
     firebase_admin.initialize_app(cred)
+
 
 db = firestore.client()
 
