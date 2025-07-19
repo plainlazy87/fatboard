@@ -3,20 +3,21 @@ import requests
 import pandas as pd
 from datetime import datetime, timedelta
 import json
-import os
 
 import firebase_admin
 from firebase_admin import credentials, firestore
 
 # ---- Initialize Firebase Admin SDK (only once) ----
 if "firebase_app" not in st.session_state:
-    cred = credentials.Certificate(st.secrets["firebase"])
+    # Parse JSON string from secrets into dict
+    firebase_cred_dict = json.loads(st.secrets["firebase"])
+    cred = credentials.Certificate(firebase_cred_dict)
     firebase_admin.initialize_app(cred)
     st.session_state["firebase_app"] = True
 
 db = firestore.client()
 
-# ---- Fitbit OAuth2 Credentials (replace with yours) ----
+# ---- Fitbit OAuth2 Credentials ----
 CLIENT_ID = st.secrets["FITBIT_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["FITBIT_CLIENT_SECRET"]
 REDIRECT_URI = "https://fatboard.streamlit.app"
@@ -26,7 +27,6 @@ AUTH_URL = (
     f"response_type=code&client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}"
     f"&scope=weight&expires_in=604800&prompt=login"
 )
-# We no longer use TOKEN_FILE because tokens will be stored in Firestore
 
 # ---- Firestore paths ----
 TOKENS_DOC = "fitbit/tokens"  # Collection "fitbit", document "tokens"
@@ -206,6 +206,7 @@ st.write(f"Current weight: {current_weight:.1f} lbs (as of {latest_date})")
 st.write(f"Total loss: {loss:.1f} lbs over {days} days")
 if countdown_days:
     st.write(f"Estimated days to reach goal of {goal_stone} stone: {countdown_days} days")
+
 
 
 
