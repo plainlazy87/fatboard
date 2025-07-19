@@ -116,7 +116,9 @@ st.set_page_config(page_title="Fitbit Weight Loss Dashboard", layout="centered")
 
 st.title("Fat Fat Fat")
 
-code = st.experimental_get_query_params().get("code", [None])[0]
+#code = st.experimental_get_query_params().get("code", [None])[0]
+code = st.query_params.get("code", [None])[0]
+
 
 tokens = load_tokens()
 access_token = tokens.get("access_token")
