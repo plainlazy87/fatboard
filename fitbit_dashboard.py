@@ -7,17 +7,16 @@ import json
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# ---- Initialize Firebase Admin SDK (only once) ----
+# Initialize Firebase Admin SDK (only once)
 if not firebase_admin._apps:
-    firebase_cred_dict = dict(st.secrets["firebase"])
+    firebase_cred_dict = json.loads(json.dumps(st.secrets["firebase"]))
     firebase_cred_dict["private_key"] = firebase_cred_dict["private_key"].replace("\\n", "\n").strip()
     cred = credentials.Certificate(firebase_cred_dict)
     firebase_admin.initialize_app(cred)
 
-
 db = firestore.client()
 
-# ---- Fitbit OAuth2 Credentials ----
+# Fitbit OAuth2 Credentials
 CLIENT_ID = st.secrets["FITBIT_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["FITBIT_CLIENT_SECRET"]
 REDIRECT_URI = "https://fatboard.streamlit.app"
@@ -28,7 +27,7 @@ AUTH_URL = (
     f"&scope=weight&expires_in=604800&prompt=login"
 )
 
-# ---- Firestore paths ----
+# Firestore document path for tokens
 TOKENS_DOC = "fitbit/tokens"
 
 def save_tokens(tokens):
@@ -68,7 +67,7 @@ def get_token_from_code(code):
         headers=headers,
         auth=(CLIENT_ID, CLIENT_SECRET),
     )
-    return response.json()
+    return response
 
 def refresh_access_token(refresh_token):
     headers = {
@@ -86,7 +85,7 @@ def refresh_access_token(refresh_token):
         headers=headers,
         auth=(CLIENT_ID, CLIENT_SECRET),
     )
-    return response.json()
+    return response
 
 def fetch_weight_data(access_token):
     start_date = datetime(2025, 5, 12)
@@ -110,63 +109,61 @@ def fetch_weight_data(access_token):
         start_date = chunk_end + timedelta(days=1)
     return {"weight": all_data}
 
-# ---- Streamlit App Setup ----
+# Streamlit app setup
 st.set_page_config(page_title="Fitbit Weight Loss Dashboard", layout="centered")
-
-st.markdown(
-    """
-    <style>
-    .css-1v3fvcr {
-        display: none;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
 
 st.title("Fat Fat Fat")
 
-# ---- Fitbit Authentication Flow ----
-
-code = st.query_params.get("code", [None])[0]
+code = st.experimental_get_query_params().get("code", [None])[0]
 
 tokens = load_tokens()
 access_token = tokens.get("access_token")
 refresh_token_val = tokens.get("refresh_token")
 
-# If "code" is present and we don’t already have a valid access_token, exchange it
-if code and not access_token:
-    st.write("🔁 Exchanging Fitbit code for token...")
-    token_response = get_token_from_code(code)
-
-    if "access_token" not in token_response:
-        st.error("❌ Failed to authenticate with Fitbit. Please try connecting again.")
-        st.markdown(f"[Click here to reconnect your Fitbit account]({AUTH_URL})")
-        st.json(token_response)
-        st.stop()
-
-    save_tokens(token_response)
-    access_token = token_response["access_token"]
-    refresh_token_val = token_response.get("refresh_token")
-
-    # Clear the query params after successful exchange
-    st.experimental_set_query_params()
-
-# If still no access token, prompt to connect
-if not access_token:
+# If no access token and no code, prompt user to connect Fitbit
+if not access_token and not code:
     st.markdown(f"[Connect your Fitbit account]({AUTH_URL})")
     st.stop()
 
-# Refresh token if needed
-if refresh_token_val:
-    refreshed = refresh_access_token(refresh_token_val)
-    if "access_token" in refreshed:
-        save_tokens(refreshed)
-        access_token = refreshed["access_token"]
-        refresh_token_val = refreshed.get("refresh_token")
+# Exchange code for tokens only if code exists and no access token
+if code and not access_token:
+    st.write("🔁 Exchanging Fitbit code for token...")
+    response = get_token_from_code(code)
+    st.write(f"Token exchange response status: {response.status_code}")
+    st.write(response.text)  # Debug: show Fitbit response
+    if response.status_code != 200:
+        st.error("❌ Failed to authenticate with Fitbit. Please try connecting again.")
+        st.markdown(f"[Click here to reconnect your Fitbit account]({AUTH_URL})")
+        st.stop()
+    tokens = response.json()
+    if "access_token" not in tokens:
+        st.error("❌ Failed to authenticate with Fitbit. Please try connecting again.")
+        st.markdown(f"[Click here to reconnect your Fitbit account]({AUTH_URL})")
+        st.stop()
+    save_tokens(tokens)
+    access_token = tokens["access_token"]
+    refresh_token_val = tokens.get("refresh_token")
+    # Clear code from URL so it won't be reused
+    st.experimental_set_query_params()
 
-# ---- Fetch and process data ----
+# If we have a refresh token but no valid access token, refresh it
+elif refresh_token_val and not access_token:
+    st.write("🔄 Refreshing access token...")
+    response = refresh_access_token(refresh_token_val)
+    st.write(f"Token refresh response status: {response.status_code}")
+    st.write(response.text)  # Debug: show Fitbit response
+    if response.status_code == 200:
+        tokens = response.json()
+        if "access_token" in tokens:
+            save_tokens(tokens)
+            access_token = tokens["access_token"]
+            refresh_token_val = tokens.get("refresh_token")
+    else:
+        st.error("❌ Failed to refresh token, please reconnect Fitbit.")
+        st.markdown(f"[Connect your Fitbit account]({AUTH_URL})")
+        st.stop()
 
+# Now fetch Fitbit weight data with valid access token
 data = fetch_weight_data(access_token)
 if "weight" not in data or len(data["weight"]) == 0:
     st.error("No weight data found. Have you logged your weight recently in the Fitbit app?")
@@ -204,14 +201,12 @@ else:
     goal_date = None
     countdown_days = None
 
-# ---- Display weight progress ----
-
+# Display weight progress
 st.write(f"Start weight: {start_weight:.1f} lbs")
 st.write(f"Current weight: {current_weight:.1f} lbs (as of {latest_date})")
 st.write(f"Total loss: {loss:.1f} lbs over {days} days")
 if countdown_days:
     st.write(f"Estimated days to reach goal of {goal_stone} stone: {countdown_days} days")
-
 
 
 
