@@ -2,9 +2,8 @@ import streamlit as st
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
-import json
 
-# ==== Fitbit OAuth2 Setup ====
+# OAuth setup
 CLIENT_ID = st.secrets["FITBIT_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["FITBIT_CLIENT_SECRET"]
 REDIRECT_URI = "https://fatboard.streamlit.app"
@@ -15,7 +14,7 @@ AUTH_URL = (
     f"&scope=weight&expires_in=604800&prompt=login"
 )
 
-# ==== OAuth Token Functions ====
+# OAuth helper functions
 def get_token_from_code(code):
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     data = {
@@ -41,7 +40,52 @@ def refresh_access_token(refresh_token):
     )
     return response.json()
 
-# ==== Fitbit Data ====
+# Get code from URL
+query_code = st.query_params.get("code", [None])[0]
+
+# ==== FIX: Don't reuse the code ====
+if "auth_successful" not in st.session_state:
+    st.session_state["auth_successful"] = False
+
+# If no access token yet
+if "access_token" not in st.session_state:
+
+    # We have a code and haven't used it yet
+    if query_code and not st.session_state["auth_successful"]:
+        st.write("🔁 Exchanging Fitbit code for token...")
+        tokens = get_token_from_code(query_code)
+        if "access_token" in tokens:
+            st.session_state["access_token"] = tokens["access_token"]
+            st.session_state["refresh_token"] = tokens.get("refresh_token")
+            st.session_state["auth_successful"] = True
+            st.experimental_set_query_params()  # 🚨 Clear code from URL
+        else:
+            st.error("❌ Fitbit auth failed.")
+            st.markdown(f"[Reconnect Fitbit]({AUTH_URL})")
+            st.json(tokens)
+            st.stop()
+
+    # No code or it's already been used
+    elif not query_code:
+        st.markdown(f"[Connect your Fitbit account]({AUTH_URL})")
+        st.stop()
+    else:
+        # Invalid to retry same code
+        st.error("❌ This Fitbit auth link has expired. Please reconnect.")
+        st.markdown(f"[Reconnect Fitbit]({AUTH_URL})")
+        st.stop()
+
+# Refresh if needed
+if "refresh_token" in st.session_state:
+    tokens = refresh_access_token(st.session_state["refresh_token"])
+    if "access_token" in tokens:
+        st.session_state["access_token"] = tokens["access_token"]
+        st.session_state["refresh_token"] = tokens.get("refresh_token")
+
+# Use access token
+access_token = st.session_state["access_token"]
+
+# Fetch data (as before)
 def fetch_weight_data(access_token):
     start_date = datetime(2025, 5, 12)
     end_date = datetime.today()
@@ -64,106 +108,19 @@ def fetch_weight_data(access_token):
         start_date = chunk_end + timedelta(days=1)
     return {"weight": all_data}
 
-# ==== Weight Conversion ====
-def kg_to_lbs(kg): return kg * 2.20462
-def lbs_to_st_lbs(lbs):
-    stn = int(lbs // 14)
-    rem = lbs % 14
-    return f"{stn}st {rem:.1f}lbs"
-def st_to_lbs(stone): return stone * 14
-
-# ==== Streamlit App UI ====
-st.set_page_config(page_title="Fat Dashboard", layout="centered")
-st.title("Fat Fat Fat")
-
-# ==== Query Params ====
-query_code = st.query_params.get("code", [None])[0]
-
-# ==== OAuth Flow ====
-if "access_token" not in st.session_state:
-    if query_code:
-        st.write("🔁 Exchanging Fitbit code for token...")
-        tokens = get_token_from_code(query_code)
-        if "access_token" in tokens:
-            st.session_state["access_token"] = tokens["access_token"]
-            st.session_state["refresh_token"] = tokens.get("refresh_token")
-            st.experimental_set_query_params()  # 🚨 Clear code from URL!
-        else:
-            st.error("❌ Fitbit auth failed.")
-            st.markdown(f"[Reconnect Fitbit]({AUTH_URL})")
-            st.json(tokens)
-            st.stop()
-    else:
-        st.markdown(f"[Connect your Fitbit account]({AUTH_URL})")
-        st.stop()
-
-# ==== Optional: Refresh Token (not required immediately) ====
-if "refresh_token" in st.session_state:
-    tokens = refresh_access_token(st.session_state["refresh_token"])
-    if "access_token" in tokens:
-        st.session_state["access_token"] = tokens["access_token"]
-        st.session_state["refresh_token"] = tokens.get("refresh_token")
-
-# ==== Get Data ====
-access_token = st.session_state["access_token"]
+# Fetch & display
 data = fetch_weight_data(access_token)
-
 if "weight" not in data or len(data["weight"]) == 0:
     st.error("No weight data found. Have you logged your weight in Fitbit?")
     st.json(data)
     st.stop()
 
-# ==== DataFrame Prep ====
 df = pd.DataFrame(data["weight"])
 df["dateTime"] = pd.to_datetime(df["date"])
 df = df.sort_values("dateTime")
-df["date"] = df["dateTime"].dt.strftime("%d-%m-%Y")
-df["weight_lbs"] = df["weight"].apply(kg_to_lbs)
-df["weight_stlbs"] = df["weight_lbs"].apply(lbs_to_st_lbs)
+df["weight_lbs"] = df["weight"].apply(lambda x: x * 2.20462)
 
-# ==== Progress ====
-journey_start = datetime(2025, 5, 12)
-df_after = df[df["dateTime"] >= journey_start]
-if df_after.empty:
-    st.error("No weight data since journey start (12 May 2025).")
-    st.stop()
-
-start_weight = df_after.iloc[0]["weight_lbs"]
-current_weight = df.iloc[-1]["weight_lbs"]
-loss = start_weight - current_weight
-days = (datetime.today() - journey_start).days
-avg_loss = loss / days if days else 0
-
-goal_st = 15
-goal_lbs = st_to_lbs(goal_st)
-
-if current_weight > goal_lbs and avg_loss > 0:
-    days_left = (current_weight - goal_lbs) / avg_loss
-    goal_date = datetime.today() + timedelta(days=days_left)
-    countdown_days = (goal_date - datetime.today()).days
-else:
-    goal_date = None
-    countdown_days = None
-
-# ==== Output ====
-st.metric("Current Weight", lbs_to_st_lbs(current_weight))
-st.metric("Loss Since Start", f"{loss:.1f} lbs")
-st.metric("Average Loss/Day", f"{avg_loss:.2f} lbs")
-if goal_date:
-    st.success(f"🎯 Goal: {goal_st}st in {countdown_days} days ({goal_date.strftime('%d %b %Y')})")
-
-# ==== Plot ====
-import plotly.graph_objects as go
-fig = go.Figure()
-fig.add_trace(go.Scatter(
-    x=df["date"],
-    y=df["weight_lbs"],
-    mode="lines+markers",
-    name="Weight (lbs)"
-))
-st.plotly_chart(fig, use_container_width=True)
-
-
+st.line_chart(df.set_index("dateTime")["weight_lbs"])
 
 
 
