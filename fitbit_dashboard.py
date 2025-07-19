@@ -202,11 +202,11 @@ else:
     countdown_days = None
 
 # Display weight progress
-st.write(f"Start weight: {start_weight:.1f} lbs")
-st.write(f"Current weight: {current_weight:.1f} lbs (as of {latest_date})")
-st.write(f"Total loss: {loss:.1f} lbs over {days} days")
-if countdown_days:
-    st.write(f"Estimated days to reach goal of {goal_stone} stone: {countdown_days} days")
+#st.write(f"Start weight: {start_weight:.1f} lbs")
+#st.write(f"Current weight: {current_weight:.1f} lbs (as of {latest_date})")
+#st.write(f"Total loss: {loss:.1f} lbs over {days} days")
+#if countdown_days:
+#    st.write(f"Estimated days to reach goal of {goal_stone} stone: {countdown_days} days")
 
 
 
