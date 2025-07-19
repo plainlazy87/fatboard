@@ -1,9 +1,8 @@
 import streamlit as st
 import requests
-import pandas as pd
 from datetime import datetime, timedelta
+import pandas as pd
 
-# OAuth setup
 CLIENT_ID = st.secrets["FITBIT_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["FITBIT_CLIENT_SECRET"]
 REDIRECT_URI = "https://fatboard.streamlit.app"
@@ -14,7 +13,11 @@ AUTH_URL = (
     f"&scope=weight&expires_in=604800&prompt=login"
 )
 
-# OAuth helper functions
+# Get code from query params
+query_code = st.query_params.get("code", [None])[0]
+
+# ---- Helper Functions ----
+
 def get_token_from_code(code):
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     data = {
@@ -40,52 +43,6 @@ def refresh_access_token(refresh_token):
     )
     return response.json()
 
-# Get code from URL
-query_code = st.query_params.get("code", [None])[0]
-
-# ==== FIX: Don't reuse the code ====
-if "auth_successful" not in st.session_state:
-    st.session_state["auth_successful"] = False
-
-# If no access token yet
-if "access_token" not in st.session_state:
-
-    # We have a code and haven't used it yet
-    if query_code and not st.session_state["auth_successful"]:
-        st.write("🔁 Exchanging Fitbit code for token...")
-        tokens = get_token_from_code(query_code)
-        if "access_token" in tokens:
-            st.session_state["access_token"] = tokens["access_token"]
-            st.session_state["refresh_token"] = tokens.get("refresh_token")
-            st.session_state["auth_successful"] = True
-            st.experimental_set_query_params()  # 🚨 Clear code from URL
-        else:
-            st.error("❌ Fitbit auth failed.")
-            st.markdown(f"[Reconnect Fitbit]({AUTH_URL})")
-            st.json(tokens)
-            st.stop()
-
-    # No code or it's already been used
-    elif not query_code:
-        st.markdown(f"[Connect your Fitbit account]({AUTH_URL})")
-        st.stop()
-    else:
-        # Invalid to retry same code
-        st.error("❌ This Fitbit auth link has expired. Please reconnect.")
-        st.markdown(f"[Reconnect Fitbit]({AUTH_URL})")
-        st.stop()
-
-# Refresh if needed
-if "refresh_token" in st.session_state:
-    tokens = refresh_access_token(st.session_state["refresh_token"])
-    if "access_token" in tokens:
-        st.session_state["access_token"] = tokens["access_token"]
-        st.session_state["refresh_token"] = tokens.get("refresh_token")
-
-# Use access token
-access_token = st.session_state["access_token"]
-
-# Fetch data (as before)
 def fetch_weight_data(access_token):
     start_date = datetime(2025, 5, 12)
     end_date = datetime.today()
@@ -108,11 +65,46 @@ def fetch_weight_data(access_token):
         start_date = chunk_end + timedelta(days=1)
     return {"weight": all_data}
 
-# Fetch & display
+# ---- OAuth Flow ----
+
+# Step 1: Already authenticated
+if "access_token" in st.session_state:
+    access_token = st.session_state["access_token"]
+
+# Step 2: Got a new code from Fitbit
+elif query_code and "code_used" not in st.session_state:
+    st.write("Exchanging Fitbit auth code for token...")
+    token_response = get_token_from_code(query_code)
+    if "access_token" in token_response:
+        st.session_state["access_token"] = token_response["access_token"]
+        st.session_state["refresh_token"] = token_response["refresh_token"]
+        st.session_state["code_used"] = True  # Prevent reuse
+        st.experimental_set_query_params()  # Clear ?code= from URL
+        access_token = token_response["access_token"]
+    else:
+        st.error("❌ Fitbit auth failed.")
+        st.markdown(f"[Reconnect Fitbit]({AUTH_URL})")
+        st.json(token_response)
+        st.stop()
+
+# Step 3: Not authenticated, no code
+else:
+    st.markdown(f"[🔗 Connect your Fitbit account]({AUTH_URL})")
+    st.stop()
+
+# ---- Optional: Token Refresh ----
+if "refresh_token" in st.session_state:
+    token_response = refresh_access_token(st.session_state["refresh_token"])
+    if "access_token" in token_response:
+        st.session_state["access_token"] = token_response["access_token"]
+        st.session_state["refresh_token"] = token_response["refresh_token"]
+        access_token = token_response["access_token"]
+
+# ---- Fetch Weight Data ----
 data = fetch_weight_data(access_token)
-if "weight" not in data or len(data["weight"]) == 0:
-    st.error("No weight data found. Have you logged your weight in Fitbit?")
-    st.json(data)
+
+if "weight" not in data or not data["weight"]:
+    st.error("No weight data found.")
     st.stop()
 
 df = pd.DataFrame(data["weight"])
@@ -121,7 +113,6 @@ df = df.sort_values("dateTime")
 df["weight_lbs"] = df["weight"].apply(lambda x: x * 2.20462)
 
 st.line_chart(df.set_index("dateTime")["weight_lbs"])
-
 
 
 
