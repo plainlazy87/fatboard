@@ -9,8 +9,9 @@ from firebase_admin import credentials, firestore
 
 # ---- Initialize Firebase Admin SDK (only once) ----
 if not firebase_admin._apps:
-    # Convert secrets.Mapping to plain dict and fix private_key formatting
-    firebase_cred_dict = dict(st.secrets["firebase"])
+    # Convert secrets.Mapping to dict, fix private_key formatting
+    # st.secrets["firebase"] is a Mapping, convert to dict for .replace()
+    firebase_cred_dict = json.loads(json.dumps(st.secrets["firebase"]))
     firebase_cred_dict["private_key"] = firebase_cred_dict["private_key"].replace("\\n", "\n").strip()
     cred = credentials.Certificate(firebase_cred_dict)
     firebase_admin.initialize_app(cred)
@@ -130,12 +131,11 @@ st.title("Fat Fat Fat")
 
 code = st.query_params.get("code", [None])[0]
 
-# Load tokens from Firestore instead of local file
 tokens = load_tokens()
 access_token = tokens.get("access_token")
 refresh_token_val = tokens.get("refresh_token")
 
-# Prompt user to authorize if no access token or code
+# Prompt user to authorize if no access token and no code
 if not access_token and not code:
     st.markdown(f"[Connect your Fitbit account]({AUTH_URL})")
     st.stop()
@@ -152,7 +152,7 @@ if code and not access_token:
     save_tokens(tokens)  # Save tokens in Firestore
     access_token = tokens["access_token"]
     refresh_token_val = tokens.get("refresh_token")
-    st.experimental_set_query_params()  # Clear query params after exchange
+    st.experimental_set_query_params()  # Clear query params immediately after successful exchange
 
 # Refresh access token if needed
 elif refresh_token_val:
@@ -200,7 +200,7 @@ else:
     goal_date = None
     countdown_days = None
 
-# Optional: Display the weight progress chart or data here
+# Display weight progress
 st.write(f"Start weight: {start_weight:.1f} lbs")
 st.write(f"Current weight: {current_weight:.1f} lbs (as of {latest_date})")
 st.write(f"Total loss: {loss:.1f} lbs over {days} days")
