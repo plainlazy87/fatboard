@@ -10,8 +10,7 @@ from firebase_admin import credentials, firestore
 # ---- Initialize Firebase Admin SDK (only once) ----
 if "firebase_app" not in st.session_state:
     # Parse JSON string from secrets into dict
-    firebase_cred_dict = json.loads(st.secrets["firebase"])
-    cred = credentials.Certificate(firebase_cred_dict)
+    cred = credentials.Certificate(st.secrets["firebase"])
     firebase_admin.initialize_app(cred)
     st.session_state["firebase_app"] = True
 
