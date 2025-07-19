@@ -2,17 +2,16 @@ import streamlit as st
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
+import json
 
 import firebase_admin
 from firebase_admin import credentials, firestore
 
 # ---- Initialize Firebase Admin SDK (only once) ----
-import copy
-
 if "firebase_app" not in st.session_state:
-    # Make a copy of the firebase dict from secrets
-    firebase_cred_dict = copy.deepcopy(st.secrets["firebase"])
-    # Fix the multiline private_key formatting
+    # Convert secrets.Mapping to plain dict (one level)
+    firebase_cred_dict = dict(st.secrets["firebase"])
+    # Fix private key formatting
     firebase_cred_dict["private_key"] = firebase_cred_dict["private_key"].replace("\\n", "\n").strip()
 
     cred = credentials.Certificate(firebase_cred_dict)
@@ -210,7 +209,6 @@ st.write(f"Current weight: {current_weight:.1f} lbs (as of {latest_date})")
 st.write(f"Total loss: {loss:.1f} lbs over {days} days")
 if countdown_days:
     st.write(f"Estimated days to reach goal of {goal_stone} stone: {countdown_days} days")
-
 
 
 
