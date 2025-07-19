@@ -9,8 +9,6 @@ from firebase_admin import credentials, firestore
 
 # ---- Initialize Firebase Admin SDK (only once) ----
 if not firebase_admin._apps:
-    # Convert secrets.Mapping to dict, fix private_key formatting
-    # st.secrets["firebase"] is a Mapping, convert to dict for .replace()
     firebase_cred_dict = json.loads(json.dumps(st.secrets["firebase"]))
     firebase_cred_dict["private_key"] = firebase_cred_dict["private_key"].replace("\\n", "\n").strip()
     cred = credentials.Certificate(firebase_cred_dict)
@@ -30,14 +28,12 @@ AUTH_URL = (
 )
 
 # ---- Firestore paths ----
-TOKENS_DOC = "fitbit/tokens"  # Collection "fitbit", document "tokens"
+TOKENS_DOC = "fitbit/tokens"
 
 def save_tokens(tokens):
-    """Save Fitbit tokens to Firestore."""
     db.document(TOKENS_DOC).set(tokens)
 
 def load_tokens():
-    """Load Fitbit tokens from Firestore."""
     doc = db.document(TOKENS_DOC).get()
     if doc.exists:
         return doc.to_dict()
@@ -129,40 +125,47 @@ st.markdown(
 
 st.title("Fat Fat Fat")
 
+# ---- Fitbit Authentication Flow ----
+
 code = st.query_params.get("code", [None])[0]
 
 tokens = load_tokens()
 access_token = tokens.get("access_token")
 refresh_token_val = tokens.get("refresh_token")
 
-# Prompt user to authorize if no access token and no code
-if not access_token and not code:
+# If "code" is present and we don’t already have a valid access_token, exchange it
+if code and not access_token:
+    st.write("🔁 Exchanging Fitbit code for token...")
+    token_response = get_token_from_code(code)
+
+    if "access_token" not in token_response:
+        st.error("❌ Failed to authenticate with Fitbit. Please try connecting again.")
+        st.markdown(f"[Click here to reconnect your Fitbit account]({AUTH_URL})")
+        st.json(token_response)
+        st.stop()
+
+    save_tokens(token_response)
+    access_token = token_response["access_token"]
+    refresh_token_val = token_response.get("refresh_token")
+
+    # Clear the query params after successful exchange
+    st.experimental_set_query_params()
+
+# If still no access token, prompt to connect
+if not access_token:
     st.markdown(f"[Connect your Fitbit account]({AUTH_URL})")
     st.stop()
 
-# Exchange code for token if needed
-if code and not access_token:
-    st.write("🔁 Exchanging Fitbit code for token...")
-    tokens = get_token_from_code(code)
-    if "access_token" not in tokens:
-        st.error("❌ Failed to authenticate with Fitbit. Please try connecting again.")
-        st.markdown(f"[Click here to reconnect your Fitbit account]({AUTH_URL})")
-        st.json(tokens)
-        st.stop()
-    save_tokens(tokens)  # Save tokens in Firestore
-    access_token = tokens["access_token"]
-    refresh_token_val = tokens.get("refresh_token")
-    st.experimental_set_query_params()  # Clear query params immediately after successful exchange
+# Refresh token if needed
+if refresh_token_val:
+    refreshed = refresh_access_token(refresh_token_val)
+    if "access_token" in refreshed:
+        save_tokens(refreshed)
+        access_token = refreshed["access_token"]
+        refresh_token_val = refreshed.get("refresh_token")
 
-# Refresh access token if needed
-elif refresh_token_val:
-    tokens = refresh_access_token(refresh_token_val)
-    if "access_token" in tokens:
-        save_tokens(tokens)  # Update tokens in Firestore
-        access_token = tokens["access_token"]
-        refresh_token_val = tokens.get("refresh_token")
+# ---- Fetch and process data ----
 
-# Fetch weight data from Fitbit API
 data = fetch_weight_data(access_token)
 if "weight" not in data or len(data["weight"]) == 0:
     st.error("No weight data found. Have you logged your weight recently in the Fitbit app?")
@@ -200,12 +203,16 @@ else:
     goal_date = None
     countdown_days = None
 
-# Display weight progress
+# ---- Display weight progress ----
+
 st.write(f"Start weight: {start_weight:.1f} lbs")
 st.write(f"Current weight: {current_weight:.1f} lbs (as of {latest_date})")
 st.write(f"Total loss: {loss:.1f} lbs over {days} days")
 if countdown_days:
     st.write(f"Estimated days to reach goal of {goal_stone} stone: {countdown_days} days")
+
+
+
 
 
 
