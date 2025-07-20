@@ -133,7 +133,7 @@ def is_token_valid(token):
 
 # Refresh if access token is present but expired
 if access_token and not is_token_valid(access_token):
-    st.write("🔄 Access token expired, refreshing...")
+    #st.write("🔄 Access token expired, refreshing...")
     response = refresh_access_token(refresh_token_val)
     if response.status_code == 200:
         tokens = response.json()
