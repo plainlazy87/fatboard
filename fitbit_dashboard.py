@@ -124,10 +124,32 @@ tokens = load_tokens()
 access_token = tokens.get("access_token")
 refresh_token_val = tokens.get("refresh_token")
 
+# Always test access token by calling a lightweight Fitbit endpoint
+def is_token_valid(token):
+    test_url = "https://api.fitbit.com/1/user/-/profile.json"
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = requests.get(test_url, headers=headers)
+    return resp.status_code == 200
+
+# Refresh if access token is present but expired
+if access_token and not is_token_valid(access_token):
+    st.write("🔄 Access token expired, refreshing...")
+    response = refresh_access_token(refresh_token_val)
+    if response.status_code == 200:
+        tokens = response.json()
+        save_tokens(tokens)
+        access_token = tokens["access_token"]
+        refresh_token_val = tokens.get("refresh_token")
+    else:
+        st.error("❌ Failed to refresh token, please reconnect Fitbit.")
+        st.markdown(f"[Connect your Fitbit account]({AUTH_URL})")
+        st.stop()
+
 # If no access token and no code, prompt user to connect Fitbit
 if not access_token and not code:
     st.markdown(f"[Connect your Fitbit account]({AUTH_URL})")
     st.stop()
+
 
 # Exchange code for tokens only if code exists and no access token
 if code and not access_token:
