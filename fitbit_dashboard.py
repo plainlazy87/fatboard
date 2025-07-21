@@ -114,7 +114,7 @@ def fetch_weight_data(access_token):
 # Streamlit app setup
 st.set_page_config(page_title="Fitbit Weight Loss Dashboard", layout="centered")
 
-st.title("Fat Fat Fat")
+st.title("Fat Packer Tracker")
 
 #code = st.experimental_get_query_params().get("code", [None])[0]
 code = st.query_params.get("code", [None])[0]
