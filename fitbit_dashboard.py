@@ -260,13 +260,11 @@ else:
 
 
 
-
-
 # ---- Metrics Display ----
 st.subheader("📌 Latest Weigh-In")
 st.metric("Latest Weight", lbs_to_st_lbs(current_weight), delta=f"{current_weight - start_weight:.1f} lbs")
 
-# ---- Custom Styling ----
+
 progress_style = """
 <style>
 .metric-box {
@@ -281,17 +279,27 @@ progress_style = """
 .metric-label {
     font-size: 16px;
     margin-bottom: 4px;
-    font-weight: normal;
+    font-weight: normal;  /* Title line is now normal weight */
 }
 .metric-value {
     font-size: 22px;
-    font-weight: bold;
+    font-weight: bold;    /* Value remains bold */
 }
 </style>
 """
 st.markdown(progress_style, unsafe_allow_html=True)
 
-# ---- Row 1 (3 columns) ----
+# (The rest of your UI code remains unchanged, just remove all st.query_params references!)
+
+# --- Replace any remaining st.query_params.get(...) calls with query_params.get(...)
+
+# You can keep the rest of your script as is, just be sure not to mix st.query_params with experimental_get_query_params
+
+# For brevity, I’m not repeating the full UI code here as it’s unchanged.
+
+
+
+# Row 1 (3 columns): show 2 boxes, skip 3rd
 col1, col2, col3 = st.columns(3)
 with col1:
     st.markdown(f"""
@@ -307,15 +315,9 @@ with col2:
         <div class="metric-value">{days} days</div>
     </div>
     """, unsafe_allow_html=True)
-with col3:
-    st.markdown(f"""
-    <div class="metric-box">
-        <div class="metric-label">Left to Lose</div>
-        <div class="metric-value">{lbs_to_st_lbs(left_to_lose)}</div>
-    </div>
-    """, unsafe_allow_html=True)
+# col3 intentionally left blank (no box)
 
-# ---- Row 2 (3 columns) ----
+# Row 2 (3 columns): show final 3 boxes
 col4, col5, col6 = st.columns(3)
 with col4:
     st.markdown(f"""
@@ -350,8 +352,87 @@ with col6:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# --- Calculate how much is left to lose ---
-left_to_lose = max(current_weight - goal, 0)  # Prevent negative values
+
+# --- Helper function for stone + lbs ticks ---
+def lbs_to_stlbs_ticks(lbs):
+    total_lbs = round(lbs)
+    st = total_lbs // 14
+    lbs_left = total_lbs % 14
+    return f"{st}st {lbs_left}lbs"
+
+# Overall weight range ticks (for other charts)
+y_min = int(df["weight_lbs"].min()) - 1
+y_max = int(df["weight_lbs"].max()) + 1
+y_ticks = list(range(y_min, y_max + 1))
+y_tick_text = [lbs_to_stlbs_ticks(i) for i in y_ticks]
+
+# ---- Last 7 Days Weight Graph ----
+with st.container():
+    st.markdown('<div class="section-title">📅 Last 7 Days Weight</div>', unsafe_allow_html=True)
+
+    df_7day = df[df["dateTime"] >= (datetime.today() - timedelta(days=7))]
+
+    y_min_7 = int(df_7day["weight_lbs"].min()) - 1
+    y_max_7 = int(df_7day["weight_lbs"].max()) + 1
+
+    # Use 1 lb interval for ticks
+    y_ticks_7 = list(range(y_min_7, y_max_7 + 1))
+    y_tick_text_7 = [lbs_to_stlbs_ticks(tick) for tick in y_ticks_7]
+
+    fig_7day = go.Figure()
+    fig_7day.add_trace(go.Scatter(
+        x=df_7day["dateTime"],
+        y=df_7day["weight_lbs"],
+        mode="lines+markers",
+        name="Last 7 Days",
+        customdata=df_7day["weight_stlbs"],
+        hovertemplate="Date: %{x|%d-%m-%Y}<br>Weight: %{customdata}<extra></extra>",
+        line=dict(color="cyan"),
+        marker=dict(color="cyan"),
+    ))
+
+    fig_7day.add_trace(go.Scatter(
+        x=[journey_start_date, datetime(2026, 1, 1)],
+        y=[start_weight, goal],
+        mode="lines",
+        name="Goal Trendline",
+        line=dict(color="red", dash="dash"),
+    ))
+
+    fig_7day.update_layout(
+        plot_bgcolor="#3C3C3C",
+        paper_bgcolor="#3C3C3C",
+        font_color="white",
+        margin=dict(l=40, r=40, t=40, b=40),
+        xaxis_title="Date",
+        xaxis=dict(
+            range=[
+                df_7day["dateTime"].min() - timedelta(days=0.5),
+                df_7day["dateTime"].max() + timedelta(days=0.5)
+            ],
+            tickformat="%d-%m-%Y",
+            gridcolor="#555",
+        ),
+        yaxis=dict(
+            range=[y_min_7, y_max_7],
+            tickvals=y_ticks_7,
+            ticktext=y_tick_text_7,
+            gridcolor="#555",
+        ),
+        legend=dict(
+            bgcolor="#3C3C3C",
+            bordercolor="#222",
+            borderwidth=1,
+            font=dict(color="white"),
+            orientation="h",
+            yanchor="bottom",
+            y=1.1,
+            xanchor="right",
+            x=1
+        )
+    )
+    st.plotly_chart(fig_7day, use_container_width=True)
+    st.markdown("<br>", unsafe_allow_html=True)
 
 
 
