@@ -260,8 +260,7 @@ else:
 
 
 
-# --- Calculate how much is left to lose ---
-left_to_lose = max(current_weight - goal, 0)  # Prevent negative values
+
 
 # ---- Metrics Display ----
 st.subheader("📌 Latest Weigh-In")
@@ -351,7 +350,8 @@ with col6:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-
+# --- Calculate how much is left to lose ---
+left_to_lose = max(current_weight - goal, 0)  # Prevent negative values
 
 
 
