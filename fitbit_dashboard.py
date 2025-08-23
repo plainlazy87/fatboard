@@ -4,7 +4,6 @@ import pandas as pd
 from datetime import datetime, timedelta
 import json
 import plotly.graph_objects as go
-import os
 
 import firebase_admin
 from firebase_admin import credentials, firestore
@@ -100,7 +99,7 @@ def fetch_weight_data(access_token):
         )
         response = requests.get(url, headers=headers)
         if response.status_code != 200:
-            st.error(f"Error fetching data: {response.status_code}")
+            st.error(f"Error fetching Fitbit data: {response.status_code}")
             st.json(response.json())
             break
         data_chunk = response.json()
@@ -114,8 +113,6 @@ GOOGLE_FIT_CLIENT_ID = st.secrets["google_fit"]["client_id"]
 GOOGLE_FIT_CLIENT_SECRET = st.secrets["google_fit"]["client_secret"]
 GOOGLE_FIT_REDIRECT_URI = st.secrets["google_fit"]["redirect_uri"]
 GOOGLE_FIT_SCOPES = "https://www.googleapis.com/auth/fitness.activity.read"
-
-# Token storage for Google Fit
 GOOGLE_FIT_TOKENS_DOC = "google_fit/tokens"
 
 def save_google_tokens(tokens):
@@ -183,7 +180,7 @@ if access_token and not is_token_valid(access_token):
         access_token = tokens["access_token"]
         refresh_token_val = tokens.get("refresh_token")
     else:
-        st.error("❌ Failed to refresh token, please reconnect Fitbit.")
+        st.error("❌ Failed to refresh Fitbit token, reconnect needed.")
         st.markdown(f"[Connect your Fitbit account]({AUTH_URL})")
         st.stop()
 
@@ -194,8 +191,8 @@ if not access_token and not code:
 if code and not access_token:
     response = get_token_from_code(code)
     if response.status_code != 200:
-        st.error("❌ Failed to authenticate with Fitbit.")
-        st.markdown(f"[Click here to reconnect your Fitbit account]({AUTH_URL})")
+        st.error("❌ Failed Fitbit authentication.")
+        st.markdown(f"[Reconnect Fitbit]({AUTH_URL})")
         st.stop()
     tokens = response.json()
     save_tokens(tokens)
@@ -211,14 +208,13 @@ elif refresh_token_val and not access_token:
         access_token = tokens["access_token"]
         refresh_token_val = tokens.get("refresh_token")
 
-# ------------------ Fetch Fitbit Weight Data ------------------
+# ------------------ Fetch Fitbit Data ------------------
 data = fetch_weight_data(access_token)
 if "weight" not in data or len(data["weight"]) == 0:
-    st.error("No weight data found.")
+    st.error("No Fitbit weight data found.")
     st.stop()
 
-weights = data["weight"]
-df = pd.DataFrame(weights)
+df = pd.DataFrame(data["weight"])
 df["dateTime"] = pd.to_datetime(df["date"])
 df = df.sort_values("dateTime")
 df["date"] = df["dateTime"].dt.strftime("%d-%m-%Y")
@@ -244,29 +240,27 @@ else:
     goal_date = None
     countdown_days = None
 
-# ------------------ Google Fit Steps ------------------
+# ------------------ Google Fit Token & Steps Handling ------------------
 google_tokens = load_google_tokens()
 google_access_token = google_tokens.get("access_token")
 google_refresh_token = google_tokens.get("refresh_token")
 today_steps = 0
 df_steps = pd.DataFrame()
 
+# Refresh Google token if needed
 if google_access_token:
-    try:
-        df_steps = fetch_google_fit_steps(google_access_token, days=7)
-        if not df_steps.empty:
-            today_steps = int(df_steps[df_steps["date"]==datetime.today().date()]["steps"].sum())
-    except:
-        today_steps = 0
+    df_steps = fetch_google_fit_steps(google_access_token, days=7)
+    if not df_steps.empty:
+        today_steps = int(df_steps[df_steps["date"]==datetime.today().date()]["steps"].sum())
 
-# ------------------ Metrics Display ------------------
+# ------------------ Metrics ------------------
 st.subheader("📌 Latest Weigh-In")
 st.metric("Latest Weight", lbs_to_st_lbs(current_weight), delta=f"{current_weight - start_weight:.1f} lbs")
 
 st.subheader("👣 Today's Steps")
 st.metric("Steps Today", f"{today_steps:,}")
 
-# ------------------ CSS for Metric Boxes ------------------
+# ------------------ CSS ------------------
 progress_style = """
 <style>
 .metric-box { background-color: #3C3C3C; padding: 20px; border-radius: 10px; color: white; text-align: center; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin-bottom: 10px; }
@@ -277,9 +271,10 @@ progress_style = """
 """
 st.markdown(progress_style, unsafe_allow_html=True)
 
-# ------------------ Weight & Steps Graphs ------------------
-# (Keep your existing graphs here)
-# Add a new steps last 7 days graph if df_steps is not empty
+# ------------------ Fitbit Graphs (unchanged) ------------------
+# <-- Paste your full original weight charts here exactly as they were -->
+
+# ------------------ Google Fit 7-Day Steps Graph ------------------
 if not df_steps.empty:
     fig_steps = go.Figure()
     fig_steps.add_trace(go.Scatter(
