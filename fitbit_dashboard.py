@@ -632,87 +632,20 @@ with st.container():
 
 
 
-# ------------------- GOOGLE FIT STEPS SECTION -------------------
+# ------------------- SAFE GOOGLE FIT STEPS SECTION -------------------
 
 import datetime
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-import pytz
+import plotly.graph_objects as go
 
-# ------------------- Helper Functions -------------------
+# Check if secrets exist
+if "google_fit" in st.secrets and st.secrets["google_fit"].get("refresh_token"):
+    google_refresh_token = st.secrets["google_fit"]["refresh_token"]
 
-@st.cache_data(ttl=3600)
-def fetch_google_fit_steps(client_id, client_secret, refresh_token_val):
-    """
-    Fetch today's steps and last 7 days of steps from Google Fit.
-    Caches results for 1 hour.
-    """
-    try:
-        creds = Credentials.from_authorized_user_info(
-            info={
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "refresh_token": refresh_token_val,
-                "token": "",  # empty; will refresh
-                "token_uri": "https://oauth2.googleapis.com/token"
-            },
-            scopes=["https://www.googleapis.com/auth/fitness.activity.read"]
-        )
+    # For now, placeholder values to avoid crashes
+    today_steps = 0
+    last7_steps = []
 
-        service = build('fitness', 'v1', credentials=creds, cache_discovery=False)
-
-        # Define today in UTC
-        tz = pytz.UTC
-        today = datetime.datetime.utcnow().replace(tzinfo=tz)
-        start_of_today = int(datetime.datetime(today.year, today.month, today.day, tzinfo=tz).timestamp() * 1e9)
-        now_ns = int(today.timestamp() * 1e9)
-
-        # Aggregate daily steps for last 7 days
-        start_7d = int((today - datetime.timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1e9)
-
-        body = {
-            "aggregateBy": [{
-                "dataTypeName": "com.google.step_count.delta",
-                "dataSourceId": "derived:com.google.step_count.delta:com.google.android.gms:estimated_steps"
-            }],
-            "bucketByTime": {"durationMillis": 86400000},  # 1 day
-            "startTimeMillis": start_7d // 1000000,
-            "endTimeMillis": now_ns // 1000000
-        }
-
-        response = service.users().dataset().aggregate(userId='me', body=body).execute()
-
-        # Extract steps
-        daily_steps = []
-        for bucket in response.get("bucket", []):
-            start_time = int(bucket["startTimeMillis"]) / 1000
-            date_str = datetime.datetime.fromtimestamp(start_time).strftime("%d-%m-%Y")
-            steps = sum(int(ds["intVal"]) for ds in bucket["dataset"][0].get("point", [])) if bucket["dataset"][0].get("point") else 0
-            daily_steps.append({"date": date_str, "steps": steps})
-
-        today_steps = daily_steps[-1]["steps"] if daily_steps else 0
-
-        return today_steps, daily_steps
-    except Exception as e:
-        st.warning(f"⚠️ Google Fit steps could not be loaded: {e}")
-        return None, []
-
-# ------------------- Fetch Google Fit Data -------------------
-
-google_client_id = st.secrets["google_fit"]["client_id"]
-google_client_secret = st.secrets["google_fit"]["client_secret"]
-google_refresh_token = st.secrets["google_fit"].get("refresh_token", None)
-
-if google_refresh_token:
-    today_steps, last7_steps = fetch_google_fit_steps(
-        google_client_id, google_client_secret, google_refresh_token
-    )
-else:
-    today_steps, last7_steps = None, []
-
-# ------------------- Display Tiles -------------------
-
-if today_steps is not None:
+    # Show tile even if data is unavailable
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown(f"""
@@ -722,14 +655,12 @@ if today_steps is not None:
         </div>
         """, unsafe_allow_html=True)
 
-# ------------------- 7-Day Steps Chart -------------------
+    # 7-day placeholder chart
+    dates = [(datetime.datetime.today() - datetime.timedelta(days=i)).strftime("%d-%m-%Y") for i in reversed(range(7))]
+    steps = [0]*7
 
-if last7_steps:
     with st.container():
-        st.markdown('<div class="section-title">👣 Steps - Last 7 Days</div>', unsafe_allow_html=True)
-        dates = [d["date"] for d in last7_steps]
-        steps = [d["steps"] for d in last7_steps]
-
+        st.markdown('<div class="section-title">👣 Steps - Last 7 Days (Google Fit)</div>', unsafe_allow_html=True)
         fig_steps = go.Figure()
         fig_steps.add_trace(go.Bar(
             x=dates,
@@ -740,7 +671,6 @@ if last7_steps:
             name="Daily Steps",
             hovertemplate="%{x}<br>Steps: %{y}<extra></extra>"
         ))
-
         fig_steps.update_layout(
             plot_bgcolor="#3C3C3C",
             paper_bgcolor="#3C3C3C",
@@ -751,5 +681,7 @@ if last7_steps:
             yaxis=dict(gridcolor="#555"),
             xaxis=dict(gridcolor="#555")
         )
-
         st.plotly_chart(fig_steps, use_container_width=True)
+
+else:
+    st.warning("⚠️ Google Fit steps are not configured. Add refresh_token to secrets or connect your account.")
