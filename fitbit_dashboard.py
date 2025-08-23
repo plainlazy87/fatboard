@@ -621,3 +621,143 @@ with st.container():
             'weight_stlbs': 'Weight'
         }).reset_index(drop=True)
     )
+
+
+
+
+# ------------------ Google Fit Integration ------------------
+
+# Only proceed if Google Fit secrets exist
+if "google_fit" in st.secrets:
+    GOOGLE_CLIENT_ID = st.secrets["google_fit"]["client_id"]
+    GOOGLE_CLIENT_SECRET = st.secrets["google_fit"]["client_secret"]
+    GOOGLE_REDIRECT_URI = st.secrets["google_fit"]["redirect_uri"]
+
+    GOOGLE_TOKENS_DOC = "google_fit/tokens"
+
+    def save_google_tokens(tokens):
+        db.document(GOOGLE_TOKENS_DOC).set(tokens)
+
+    def load_google_tokens():
+        doc = db.document(GOOGLE_TOKENS_DOC).get()
+        if doc.exists:
+            return doc.to_dict()
+        return {}
+
+    def get_google_token_from_code(code):
+        data = {
+            "code": code,
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri": GOOGLE_REDIRECT_URI,
+            "grant_type": "authorization_code"
+        }
+        resp = requests.post("https://oauth2.googleapis.com/token", data=data)
+        return resp.json()
+
+    def refresh_google_token(refresh_token):
+        data = {
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token"
+        }
+        resp = requests.post("https://oauth2.googleapis.com/token", data=data)
+        return resp.json()
+
+    def fetch_google_steps(access_token, days=7):
+        end_time = int(datetime.now().timestamp() * 1000)
+        start_time = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
+        url = "https://fitness.googleapis.com/fitness/v1/users/me/dataset:aggregate"
+        body = {
+            "aggregateBy": [{"dataTypeName": "com.google.step_count.delta"}],
+            "bucketByTime": {"durationMillis": 24*60*60*1000},
+            "startTimeMillis": start_time,
+            "endTimeMillis": end_time
+        }
+        headers = {"Authorization": f"Bearer {access_token}"}
+        resp = requests.post(url, headers=headers, json=body)
+        steps = []
+        if resp.status_code == 200:
+            data = resp.json()
+            for bucket in data.get("bucket", []):
+                date = datetime.fromtimestamp(int(bucket["startTimeMillis"])/1000).date()
+                total_steps = sum([int(dp["value"][0]["intVal"]) for dp in bucket["dataset"][0].get("point", [])])
+                steps.append({"date": date, "steps": total_steps})
+        return steps
+
+    # OAuth flow for Google Fit
+    google_code = st.query_params.get("google_code", [None])[0]
+    google_tokens = load_google_tokens()
+    google_access = google_tokens.get("access_token")
+    google_refresh = google_tokens.get("refresh_token")
+
+    GOOGLE_AUTH_URL = (
+        f"https://accounts.google.com/o/oauth2/v2/auth?"
+        f"client_id={GOOGLE_CLIENT_ID}"
+        f"&redirect_uri={GOOGLE_REDIRECT_URI}"
+        f"&response_type=code"
+        f"&scope=https://www.googleapis.com/auth/fitness.activity.read"
+        f"&access_type=offline"
+        f"&prompt=consent"
+    )
+
+    # Exchange code for token if needed
+    if google_code and not google_access:
+        google_tokens = get_google_token_from_code(google_code)
+        save_google_tokens(google_tokens)
+        google_access = google_tokens.get("access_token")
+        google_refresh = google_tokens.get("refresh_token")
+        st.experimental_set_query_params()  # clear URL code
+
+    # Refresh token if needed
+    elif google_refresh and not google_access:
+        google_tokens = refresh_google_token(google_refresh)
+        save_google_tokens(google_tokens)
+        google_access = google_tokens.get("access_token")
+
+    # If no access token, show connect button
+    if not google_access:
+        st.markdown(f"[Connect Google Fit]({GOOGLE_AUTH_URL})")
+    else:
+        # Fetch steps
+        google_steps = fetch_google_steps(google_access)
+
+        # Top Tile: Today's Steps
+        if google_steps:
+            today_steps = google_steps[-1]["steps"]
+        else:
+            today_steps = 0
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown(f"""
+            <div class="metric-box">
+                <div class="metric-label">Today's Steps</div>
+                <div class="metric-value">{today_steps}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Last 7 Days Steps Graph
+        if google_steps:
+            df_steps = pd.DataFrame(google_steps).sort_values("date")
+            fig_steps = go.Figure()
+            fig_steps.add_trace(go.Scatter(
+                x=df_steps["date"],
+                y=df_steps["steps"],
+                mode="lines+markers",
+                line=dict(color="lime"),
+                marker=dict(color="lime"),
+                name="Steps"
+            ))
+            fig_steps.update_layout(
+                plot_bgcolor="#3C3C3C",
+                paper_bgcolor="#3C3C3C",
+                font_color="white",
+                xaxis_title="Date",
+                yaxis_title="Steps",
+                margin=dict(l=40, r=40, t=40, b=40)
+            )
+            st.plotly_chart(fig_steps, use_container_width=True)
