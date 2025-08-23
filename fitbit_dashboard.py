@@ -2,20 +2,16 @@ import streamlit as st
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
-import json
 import plotly.graph_objects as go
-import os
-
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# ---- Initialize Firebase Admin SDK ----
+# ---- Firebase Init ----
 if not firebase_admin._apps:
     firebase_cred_dict = dict(st.secrets["firebase"])
     firebase_cred_dict["private_key"] = firebase_cred_dict["private_key"].replace("\\n", "\n").strip()
     cred = credentials.Certificate(firebase_cred_dict)
     firebase_admin.initialize_app(cred)
-
 db = firestore.client()
 
 # ---- OAuth / Secrets ----
@@ -46,122 +42,76 @@ GOOGLE_AUTH_URL = (
 )
 GOOGLE_TOKENS_DOC = "google_fit/tokens"
 
-# ---- Helper Functions ----
+# ---- Helpers ----
 def save_tokens(doc_path, tokens):
     db.document(doc_path).set(tokens)
-
 def load_tokens(doc_path):
     doc = db.document(doc_path).get()
     if doc.exists:
         return doc.to_dict()
     return {}
-
-def kg_to_lbs(kg):
-    return kg * 2.20462
-
+def kg_to_lbs(kg): return kg * 2.20462
 def lbs_to_st_lbs(lbs):
-    stn = int(lbs // 14)
-    rem_lbs = lbs % 14
-    return f"{stn}st {rem_lbs:.1f}lbs"
+    stn = int(lbs // 14); rem = lbs % 14; return f"{stn}st {rem:.1f}lbs"
+def st_to_lbs(st): return st * 14
 
-def st_to_lbs(stone):
-    return stone * 14
-
-# ---- Fitbit OAuth / API ----
+# ---- Fitbit API ----
 def get_fitbit_token_from_code(code):
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    data = {
-        "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": GOOGLE_REDIRECT_URI,
-        "client_id": FITBIT_CLIENT_ID,
-    }
-    response = requests.post(FITBIT_TOKEN_URL, data=data, headers=headers, auth=(FITBIT_CLIENT_ID, FITBIT_CLIENT_SECRET))
-    return response
-
+    data = {"grant_type": "authorization_code","code": code,"redirect_uri": GOOGLE_REDIRECT_URI,"client_id": FITBIT_CLIENT_ID}
+    return requests.post(FITBIT_TOKEN_URL, data=data, headers=headers, auth=(FITBIT_CLIENT_ID, FITBIT_CLIENT_SECRET))
 def refresh_fitbit_token(refresh_token):
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    data = {
-        "grant_type": "refresh_token",
-        "refresh_token": refresh_token,
-        "client_id": FITBIT_CLIENT_ID,
-    }
-    response = requests.post(FITBIT_TOKEN_URL, data=data, headers=headers, auth=(FITBIT_CLIENT_ID, FITBIT_CLIENT_SECRET))
-    return response
-
+    data = {"grant_type": "refresh_token","refresh_token": refresh_token,"client_id": FITBIT_CLIENT_ID}
+    return requests.post(FITBIT_TOKEN_URL, data=data, headers=headers, auth=(FITBIT_CLIENT_ID, FITBIT_CLIENT_SECRET))
 def is_fitbit_token_valid(token):
-    test_url = "https://api.fitbit.com/1/user/-/profile.json"
-    resp = requests.get(test_url, headers={"Authorization": f"Bearer {token}"})
+    resp = requests.get("https://api.fitbit.com/1/user/-/profile.json", headers={"Authorization": f"Bearer {token}"})
     return resp.status_code == 200
-
 def fetch_fitbit_weight(access_token):
-    start_date = datetime(2025, 5, 12)
-    end_date = datetime.today()
-    all_data = []
-    headers = {"Authorization": f"Bearer {access_token}"}
+    start_date, end_date = datetime(2025,5,12), datetime.today()
+    all_data = []; headers={"Authorization":f"Bearer {access_token}"}
     while start_date <= end_date:
-        chunk_end = min(start_date + timedelta(days=30), end_date)
+        chunk_end = min(start_date+timedelta(days=30), end_date)
         url = f"https://api.fitbit.com/1/user/-/body/log/weight/date/{start_date.strftime('%Y-%m-%d')}/{chunk_end.strftime('%Y-%m-%d')}.json"
         resp = requests.get(url, headers=headers)
-        if resp.status_code != 200:
-            st.error(f"Fitbit fetch error: {resp.status_code}")
-            break
+        if resp.status_code != 200: break
         data_chunk = resp.json()
-        if "weight" in data_chunk:
-            all_data.extend(data_chunk["weight"])
+        if "weight" in data_chunk: all_data.extend(data_chunk["weight"])
         start_date = chunk_end + timedelta(days=1)
     return all_data
 
-# ---- Google Fit OAuth / API ----
+# ---- Google Fit API ----
 def get_google_token_from_code(code):
-    data = {
-        "code": code,
-        "client_id": GOOGLE_CLIENT_ID,
-        "client_secret": GOOGLE_CLIENT_SECRET,
-        "redirect_uri": GOOGLE_REDIRECT_URI,
-        "grant_type": "authorization_code",
-    }
-    resp = requests.post("https://oauth2.googleapis.com/token", data=data)
-    return resp.json()
-
+    data = {"code":code,"client_id":GOOGLE_CLIENT_ID,"client_secret":GOOGLE_CLIENT_SECRET,
+            "redirect_uri":GOOGLE_REDIRECT_URI,"grant_type":"authorization_code"}
+    return requests.post("https://oauth2.googleapis.com/token", data=data).json()
 def refresh_google_token(refresh_token):
-    data = {
-        "client_id": GOOGLE_CLIENT_ID,
-        "client_secret": GOOGLE_CLIENT_SECRET,
-        "refresh_token": refresh_token,
-        "grant_type": "refresh_token",
-    }
-    resp = requests.post("https://oauth2.googleapis.com/token", data=data)
-    return resp.json()
-
+    data = {"client_id":GOOGLE_CLIENT_ID,"client_secret":GOOGLE_CLIENT_SECRET,"refresh_token":refresh_token,"grant_type":"refresh_token"}
+    return requests.post("https://oauth2.googleapis.com/token", data=data).json()
 def fetch_google_steps(access_token, days=7):
-    end_time = int(datetime.now().timestamp() * 1000)
-    start_time = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
+    end_time = int(datetime.now().timestamp()*1000)
+    start_time = int((datetime.now()-timedelta(days=days)).timestamp()*1000)
     url = "https://fitness.googleapis.com/fitness/v1/users/me/dataset:aggregate"
-    body = {
-        "aggregateBy": [{"dataTypeName": "com.google.step_count.delta"}],
-        "bucketByTime": {"durationMillis": 24*60*60*1000},
-        "startTimeMillis": start_time,
-        "endTimeMillis": end_time
-    }
-    headers = {"Authorization": f"Bearer {access_token}"}
+    body = {"aggregateBy":[{"dataTypeName":"com.google.step_count.delta"}],
+            "bucketByTime":{"durationMillis":24*60*60*1000},
+            "startTimeMillis":start_time,"endTimeMillis":end_time}
+    headers={"Authorization": f"Bearer {access_token}"}
     resp = requests.post(url, headers=headers, json=body)
-    if resp.status_code != 200:
-        return []
-    data = resp.json()
-    steps = []
-    for bucket in data.get("bucket", []):
-        date = datetime.fromtimestamp(int(bucket["startTimeMillis"])/1000).date()
-        total = sum([int(dp["value"][0]["intVal"]) for dp in bucket["dataset"][0].get("point", [])])
-        steps.append({"date": date, "steps": total})
+    steps=[]
+    if resp.status_code==200:
+        data=resp.json()
+        for bucket in data.get("bucket",[]):
+            date=datetime.fromtimestamp(int(bucket["startTimeMillis"])/1000).date()
+            total=sum([int(dp["value"][0]["intVal"]) for dp in bucket["dataset"][0].get("point",[])])
+            steps.append({"date":date,"steps":total})
     return steps
 
-# ---- Streamlit App ----
+# ---- Streamlit ----
 st.set_page_config(page_title="Fatboard Tracker", layout="centered")
 st.title("Fat Packer Tracker")
 
-fitbit_code = st.query_params.get("fitbit_code", [None])[0]
-google_code = st.query_params.get("google_code", [None])[0]
+fitbit_code = st.query_params.get("fitbit_code",[None])[0]
+google_code = st.query_params.get("google_code",[None])[0]
 
 # ---- Fitbit Tokens ----
 fitbit_tokens = load_tokens(FITBIT_TOKENS_DOC)
@@ -169,201 +119,116 @@ fitbit_access = fitbit_tokens.get("access_token")
 fitbit_refresh = fitbit_tokens.get("refresh_token")
 
 if fitbit_code and not fitbit_access:
-    resp = get_fitbit_token_from_code(fitbit_code)
-    if resp.status_code == 200:
-        fitbit_tokens = resp.json()
-        save_tokens(FITBIT_TOKENS_DOC, fitbit_tokens)
-        fitbit_access = fitbit_tokens["access_token"]
+    resp=get_fitbit_token_from_code(fitbit_code)
+    if resp.status_code==200:
+        fitbit_tokens=resp.json(); save_tokens(FITBIT_TOKENS_DOC, fitbit_tokens)
+        fitbit_access=fitbit_tokens["access_token"]
     st.query_params.clear()
-
 if fitbit_access and not is_fitbit_token_valid(fitbit_access):
-    resp = refresh_fitbit_token(fitbit_refresh)
-    if resp.status_code == 200:
-        fitbit_tokens = resp.json()
-        save_tokens(FITBIT_TOKENS_DOC, fitbit_tokens)
-        fitbit_access = fitbit_tokens["access_token"]
-
+    resp=refresh_fitbit_token(fitbit_refresh)
+    if resp.status_code==200:
+        fitbit_tokens=resp.json(); save_tokens(FITBIT_TOKENS_DOC, fitbit_tokens)
+        fitbit_access=fitbit_tokens["access_token"]
 if not fitbit_access:
     st.markdown(f"[Connect your Fitbit account]({FITBIT_AUTH_URL})")
     st.stop()
 
-# ---- Google Fit Tokens ----
-google_tokens = load_tokens(GOOGLE_TOKENS_DOC)
-google_access = google_tokens.get("access_token")
-google_refresh = google_tokens.get("refresh_token")
-
+# ---- Google Tokens ----
+google_tokens=load_tokens(GOOGLE_TOKENS_DOC)
+google_access=google_tokens.get("access_token")
+google_refresh=google_tokens.get("refresh_token")
 if google_code and not google_access:
-    google_tokens = get_google_token_from_code(google_code)
-    save_tokens(GOOGLE_TOKENS_DOC, google_tokens)
-    google_access = google_tokens["access_token"]
-    st.query_params.clear()
-
+    google_tokens=get_google_token_from_code(google_code); save_tokens(GOOGLE_TOKENS_DOC,google_tokens)
+    google_access=google_tokens["access_token"]; st.query_params.clear()
 if google_access is None:
-    st.markdown(f"[Connect Google Fit]({GOOGLE_AUTH_URL})")
-    google_steps = []
+    st.markdown(f"[Connect Google Fit]({GOOGLE_AUTH_URL})"); google_steps=[]
 else:
-    try:
-        google_steps = fetch_google_steps(google_access)
-    except:
-        google_steps = []
+    try: google_steps=fetch_google_steps(google_access)
+    except: google_steps=[]
 
 # ---- Fetch Fitbit Weight ----
-fitbit_data = fetch_fitbit_weight(fitbit_access)
-if not fitbit_data:
-    st.error("No Fitbit weight data found.")
-    st.stop()
-
-df = pd.DataFrame(fitbit_data)
-df["dateTime"] = pd.to_datetime(df["date"])
-df = df.sort_values("dateTime")
-df["weight_lbs"] = df["weight"].apply(kg_to_lbs)
-df["weight_stlbs"] = df["weight_lbs"].apply(lbs_to_st_lbs)
-
-journey_start = datetime(2025, 5, 12)
-df_after_start = df[df["dateTime"] >= journey_start]
-start_weight = df_after_start.iloc[0]["weight_lbs"]
-current_weight = df.iloc[-1]["weight_lbs"]
-loss = start_weight - current_weight
-days = (datetime.today() - journey_start).days
-avg_per_day = loss / days if days>0 else 0
-goal_stone = 15
-goal_lbs = st_to_lbs(goal_stone)
-goal_date = datetime.today() + timedelta(days=(current_weight-goal_lbs)/avg_per_day) if current_weight>goal_lbs and avg_per_day>0 else None
-countdown_days = (goal_date - datetime.today()).days if goal_date else None
+fitbit_data=fetch_fitbit_weight(fitbit_access)
+if not fitbit_data: st.error("No Fitbit weight data found."); st.stop()
+df=pd.DataFrame(fitbit_data)
+df["dateTime"]=pd.to_datetime(df["date"]); df=df.sort_values("dateTime")
+df["weight_lbs"]=df["weight"].apply(kg_to_lbs); df["weight_stlbs"]=df["weight_lbs"].apply(lbs_to_st_lbs)
+journey_start=datetime(2025,5,12)
+df_after_start=df[df["dateTime"]>=journey_start]
+start_weight=df_after_start.iloc[0]["weight_lbs"]
+current_weight=df.iloc[-1]["weight_lbs"]
+loss=current_weight-start_weight
+days=(datetime.today()-journey_start).days
+avg_per_day=loss/days if days>0 else 0
+goal_stone=15; goal_lbs=st_to_lbs(goal_stone)
+goal_date=datetime.today()+timedelta(days=(current_weight-goal_lbs)/avg_per_day) if current_weight>goal_lbs and avg_per_day>0 else None
+countdown_days=(goal_date-datetime.today()).days if goal_date else None
 
 # ---- Styles ----
-tile_style = """
+tile_style="""
 <style>
-.metric-box {
-    background-color: #3C3C3C;
-    padding: 20px;
-    border-radius: 10px;
-    color: white;
-    text-align: center;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    margin-bottom: 10px;
-}
-.metric-label {
-    font-size: 16px;
-    margin-bottom: 4px;
-    font-weight: normal;
-}
-.metric-value {
-    font-size: 22px;
-    font-weight: bold;
-}
+.metric-box{background-color:#3C3C3C;padding:20px;border-radius:10px;color:white;text-align:center;
+font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;margin-bottom:10px;}
+.metric-label{font-size:16px;margin-bottom:4px;font-weight:normal;}
+.metric-value{font-size:22px;font-weight:bold;}
 </style>
 """
 st.markdown(tile_style, unsafe_allow_html=True)
 
-# ---- Tiles Top Row ----
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.markdown(f"""
-    <div class="metric-box">
-        <div class="metric-label">Today's Steps</div>
-        <div class="metric-value">{google_steps[-1]['steps'] if google_steps else 0}</div>
-    </div>
-    """, unsafe_allow_html=True)
-with col2:
-    st.markdown(f"""
-    <div class="metric-box">
-        <div class="metric-label">Total Weight Lost</div>
-        <div class="metric-value">{lbs_to_st_lbs(loss)}</div>
-    </div>
-    """, unsafe_allow_html=True)
-with col3:
-    st.markdown(f"""
-    <div class="metric-box">
-        <div class="metric-label">Days Not Being Fat</div>
-        <div class="metric-value">{days} days</div>
-    </div>
-    """, unsafe_allow_html=True)
+# ---- Top Tiles ----
+col1,col2,col3=st.columns(3)
+with col1: st.markdown(f"<div class='metric-box'><div class='metric-label'>Today's Steps</div><div class='metric-value'>{google_steps[-1]['steps'] if google_steps else 0}</div></div>",unsafe_allow_html=True)
+with col2: st.markdown(f"<div class='metric-box'><div class='metric-label'>Total Weight Lost</div><div class='metric-value'>{lbs_to_st_lbs(loss)}</div></div>",unsafe_allow_html=True)
+with col3: st.markdown(f"<div class='metric-box'><div class='metric-label'>Days Not Being Fat</div><div class='metric-value'>{days} days</div></div>",unsafe_allow_html=True)
 
-# ---- Tiles Second Row ----
-col4, col5, col6 = st.columns(3)
-with col4:
-    st.markdown(f"""
-    <div class="metric-box">
-        <div class="metric-label">Goal Weight</div>
-        <div class="metric-value">{goal_stone}st ({goal_lbs:.1f} lbs)</div>
-    </div>
-    """, unsafe_allow_html=True)
-with col5:
-    st.markdown(f"""
-    <div class="metric-box">
-        <div class="metric-label">Estimated Goal Date</div>
-        <div class="metric-value">{goal_date.strftime('%d-%m-%Y') if goal_date else '🎯 Goal reached!'}</div>
-    </div>
-    """, unsafe_allow_html=True)
-with col6:
-    st.markdown(f"""
-    <div class="metric-box">
-        <div class="metric-label">Days Until Goal</div>
-        <div class="metric-value">{countdown_days if countdown_days else 0}</div>
-    </div>
-    """, unsafe_allow_html=True)
+col4,col5,col6=st.columns(3)
+with col4: st.markdown(f"<div class='metric-box'><div class='metric-label'>Goal Weight</div><div class='metric-value'>{goal_stone}st ({goal_lbs:.1f} lbs)</div></div>",unsafe_allow_html=True)
+with col5: st.markdown(f"<div class='metric-box'><div class='metric-label'>Estimated Goal Date</div><div class='metric-value'>{goal_date.strftime('%d-%m-%Y') if goal_date else '🎯 Goal reached!'}</div></div>",unsafe_allow_html=True)
+with col6: st.markdown(f"<div class='metric-box'><div class='metric-label'>Days Until Goal</div><div class='metric-value'>{countdown_days if countdown_days else 0}</div></div>",unsafe_allow_html=True)
 
-# ---- Helper for Graph Ticks ----
-def lbs_to_stlbs_ticks(lbs):
-    total = round(lbs)
-    stn = total // 14
-    lbs_left = total % 14
-    return f"{stn}st {lbs_left}lbs"
+# ---- Fitbit Graphs ----
+def lbs_ticks(lbs): total=round(lbs); return f"{total//14}st {total%14}lbs"
+y_min=int(df["weight_lbs"].min())-1; y_max=int(df["weight_lbs"].max())+1
+y_ticks=list(range(y_min,y_max+1)); y_tick_text=[lbs_ticks(i) for i in y_ticks]
 
-y_min = int(df["weight_lbs"].min()) - 1
-y_max = int(df["weight_lbs"].max()) + 1
-y_ticks = list(range(y_min, y_max+1))
-y_tick_text = [lbs_to_stlbs_ticks(i) for i in y_ticks]
+# Last 7 Days Weight
+df_7d=df[df["dateTime"]>=datetime.today()-timedelta(days=7)]
+y_min7=int(df_7d["weight_lbs"].min())-1; y_max7=int(df_7d["weight_lbs"].max())+1
+y_ticks7=list(range(y_min7,y_max7+1)); y_tick_text7=[lbs_ticks(i) for i in y_ticks7]
+fig7=go.Figure()
+fig7.add_trace(go.Scatter(x=df_7d["dateTime"],y=df_7d["weight_lbs"],mode="lines+markers",customdata=df_7d["weight_stlbs"],hovertemplate="Date: %{x|%d-%m-%Y}<br>Weight: %{customdata}<extra></extra>",line=dict(color="cyan"),marker=dict(color="cyan")))
+fig7.add_trace(go.Scatter(x=[journey_start,datetime(2026,1,1)],y=[start_weight,goal_lbs],mode="lines",line=dict(color="red",dash="dash"),name="Goal Trendline"))
+fig7.update_layout(plot_bgcolor="#3C3C3C",paper_bgcolor="#3C3C3C",font_color="white",
+                  xaxis=dict(range=[df_7d["dateTime"].min()-timedelta(days=0.5),df_7d["dateTime"].max()+timedelta(days=0.5)],tickformat="%d-%m-%Y"),
+                  yaxis=dict(range=[y_min7,y_max7],tickvals=y_ticks7,ticktext=y_tick_text7,gridcolor="#555"))
+st.plotly_chart(fig7,use_container_width=True)
 
-# ---- Last 7 Days Weight Graph ----
-df_7d = df[df["dateTime"] >= datetime.today() - timedelta(days=7)]
-y_min_7 = int(df_7d["weight_lbs"].min()) - 1
-y_max_7 = int(df_7d["weight_lbs"].max()) + 1
-y_ticks_7 = list(range(y_min_7, y_max_7+1))
-y_tick_text_7 = [lbs_to_stlbs_ticks(i) for i in y_ticks_7]
+# Daily Weight Over Time
+fig_daily=go.Figure()
+fig_daily.add_trace(go.Scatter(x=df["dateTime"],y=df["weight_lbs"],mode="lines+markers",customdata=df["weight_stlbs"],hovertemplate="Date: %{x|%d-%m-%Y}<br>Weight: %{customdata}<extra></extra>",line=dict(color="cyan"),marker=dict(color="cyan")))
+fig_daily.add_trace(go.Scatter(x=[journey_start,datetime(2026,1,1)],y=[start_weight,goal_lbs],mode="lines",line=dict(color="red",dash="dash"),name="Goal Trendline"))
+fig_daily.update_layout(plot_bgcolor="#3C3C3C",paper_bgcolor="#3C3C3C",font_color="white",
+                        xaxis=dict(range=[df["dateTime"].min()-timedelta(days=0.5),df["dateTime"].max()+timedelta(days=0.5)],tickformat="%d-%m-%Y"),
+                        yaxis=dict(range=[y_min,y_max],tickvals=y_ticks,ticktext=y_tick_text,gridcolor="#555"))
+st.plotly_chart(fig_daily,use_container_width=True)
 
-fig7 = go.Figure()
-fig7.add_trace(go.Scatter(x=df_7d["dateTime"], y=df_7d["weight_lbs"], mode="lines+markers",
-                          customdata=df_7d["weight_stlbs"], hovertemplate="Date: %{x|%d-%m-%Y}<br>Weight: %{customdata}<extra></extra>",
-                          line=dict(color="cyan"), marker=dict(color="cyan")))
-fig7.update_layout(
-    plot_bgcolor="#3C3C3C", paper_bgcolor="#3C3C3C", font_color="white",
-    xaxis=dict(range=[df_7d["dateTime"].min()-timedelta(days=0.5), df_7d["dateTime"].max()+timedelta(days=0.5)],
-               tickformat="%d-%m-%Y"),
-    yaxis=dict(range=[y_min_7, y_max_7], tickvals=y_ticks_7, ticktext=y_tick_text_7, gridcolor="#555")
-)
-st.plotly_chart(fig7, use_container_width=True)
+# Weekly Weight Loss
+df['week']=df['dateTime'].dt.to_period('W').apply(lambda r:r.start_time)
+weekly=df.groupby('week')['weight_lbs'].mean().reset_index()
+weekly['weight_loss']=weekly['weight_lbs'].shift(1)-weekly['weight_lbs']; weekly=weekly.dropna(subset=['weight_loss'])
+weekly['color']=weekly['weight_loss'].apply(lambda v:'green' if v>0 else ('red' if v<0 else 'gray'))
+figw=go.Figure()
+for _,row in weekly.iterrows(): figw.add_trace(go.Bar(x=[row['week']],y=[row['weight_loss']],marker_color=row['color'],text=[f"{-row['weight_loss']:.1f}" if row['weight_loss']>0 else f"{-row['weight_loss']:.1f}"],textposition='outside'))
+figw.update_layout(plot_bgcolor="#3C3C3C",paper_bgcolor="#3C3C3C",font_color="white",xaxis=dict(tickformat="%d-%m-%Y",gridcolor="#555"),yaxis=dict(zeroline=True,zerolinecolor="white",zerolinewidth=2,gridcolor="#555"))
+st.plotly_chart(figw,use_container_width=True)
 
-# ---- Daily Weight Graph ----
-fig_daily = go.Figure()
-fig_daily.add_trace(go.Scatter(x=df["dateTime"], y=df["weight_lbs"], mode="lines+markers",
-                               customdata=df["weight_stlbs"], hovertemplate="Date: %{x|%d-%m-%Y}<br>Weight: %{customdata}<extra></extra>",
-                               line=dict(color="cyan"), marker=dict(color="cyan")))
-fig_daily.update_layout(
-    plot_bgcolor="#3C3C3C", paper_bgcolor="#3C3C3C", font_color="white",
-    xaxis=dict(range=[df["dateTime"].min()-timedelta(days=0.5), df["dateTime"].max()+timedelta(days=0.5)],
-               tickformat="%d-%m-%Y"),
-    yaxis=dict(range=[y_min, y_max], tickvals=y_ticks, ticktext=y_tick_text, gridcolor="#555")
-)
-st.plotly_chart(fig_daily, use_container_width=True)
-
-# ---- Weekly Weight Loss ----
-df['week'] = df['dateTime'].dt.to_period('W').apply(lambda r: r.start_time)
-weekly = df.groupby('week')['weight_lbs'].mean().reset_index()
-weekly['weight_loss'] = weekly['weight_lbs'].shift(1) - weekly['weight_lbs']
-weekly = weekly.dropna(subset=['weight_loss'])
-weekly['color'] = weekly['weight_loss'].apply(lambda v: 'green' if v>0 else ('red' if v<0 else 'gray'))
-figw = go.Figure()
-for _, row in weekly.iterrows():
-    figw.add_trace(go.Bar(x=[row['week']], y=[row['weight_loss']], marker_color=row['color'],
-                          text=[f"{-row['weight_loss']:.1f}" if row['weight_loss']>0 else f"{-row['weight_loss']:.1f}"], textposition='outside'))
-figw.update_layout(plot_bgcolor="#3C3C3C", paper_bgcolor="#3C3C3C", font_color="white",
-                   xaxis=dict(tickformat="%d-%m-%Y", gridcolor="#555"),
-                   yaxis=dict(zeroline=True, zerolinecolor="white", zerolinewidth=2, gridcolor="#555"))
-st.plotly_chart(figw, use_container_width=True)
+# ---- Google Fit Steps Graph ----
+if google_steps:
+    df_steps=pd.DataFrame(google_steps).sort_values("date")
+    fig_steps=go.Figure()
+    fig_steps.add_trace(go.Scatter(x=df_steps["date"],y=df_steps["steps"],mode="lines+markers",line=dict(color="lime"),marker=dict(color="lime")))
+    fig_steps.update_layout(plot_bgcolor="#3C3C3C",paper_bgcolor="#3C3C3C",font_color="white",xaxis_title="Date",yaxis_title="Steps",margin=dict(l=40,r=40,t=40,b=40))
+    st.plotly_chart(fig_steps,use_container_width=True)
 
 # ---- Raw Weight Log ----
-df_sorted = df.sort_values(by="dateTime", ascending=False)
-df_sorted['date'] = df_sorted['dateTime'].dt.date
-st.dataframe(df_sorted[['date', 'weight_stlbs']].rename(columns={'date':'Date', 'weight_stlbs':'Weight'}).reset_index(drop=True))
+df_sorted=df.sort_values("dateTime",ascending=False); df_sorted['date']=df_sorted["dateTime"].dt.date
+st.dataframe(df_sorted[['date','weight_stlbs']].rename(columns={'date':'Date','weight_stlbs':'Weight'}).reset_index(drop=True))
