@@ -621,7 +621,3 @@ with st.container():
             'weight_stlbs': 'Weight'
         }).reset_index(drop=True)
     )
-
-
-
-
