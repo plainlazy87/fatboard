@@ -135,7 +135,6 @@ def refresh_google_token(refresh_token):
     return resp.json()
 
 def fetch_google_steps(access_token, days=7):
-    # Fetch aggregated step count from Google Fit
     end_time = int(datetime.now().timestamp() * 1000)
     start_time = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
     url = "https://fitness.googleapis.com/fitness/v1/users/me/dataset:aggregate"
@@ -161,9 +160,8 @@ def fetch_google_steps(access_token, days=7):
 st.set_page_config(page_title="Fatboard Tracker", layout="centered")
 st.title("Fat Packer Tracker")
 
-query_params = st.experimental_get_query_params()
-fitbit_code = query_params.get("fitbit_code", [None])[0]
-google_code = query_params.get("google_code", [None])[0]
+fitbit_code = st.query_params.get("fitbit_code", [None])[0]
+google_code = st.query_params.get("google_code", [None])[0]
 
 # ---- Fitbit Tokens ----
 fitbit_tokens = load_tokens(FITBIT_TOKENS_DOC)
@@ -176,7 +174,7 @@ if fitbit_code and not fitbit_access:
         fitbit_tokens = resp.json()
         save_tokens(FITBIT_TOKENS_DOC, fitbit_tokens)
         fitbit_access = fitbit_tokens["access_token"]
-    st.experimental_set_query_params()
+    st.query_params.clear()
 
 if fitbit_access and not is_fitbit_token_valid(fitbit_access):
     resp = refresh_fitbit_token(fitbit_refresh)
@@ -198,7 +196,7 @@ if google_code and not google_access:
     google_tokens = get_google_token_from_code(google_code)
     save_tokens(GOOGLE_TOKENS_DOC, google_tokens)
     google_access = google_tokens["access_token"]
-    st.experimental_set_query_params()
+    st.query_params.clear()
 
 if google_access is None:
     st.markdown(f"[Connect Google Fit]({GOOGLE_AUTH_URL})")
@@ -230,10 +228,10 @@ days = (datetime.today() - journey_start).days
 avg_per_day = loss / days if days>0 else 0
 goal_stone = 15
 goal_lbs = st_to_lbs(goal_stone)
-goal_date = datetime.today() + timedelta(days=(current_weight-goal_lbs)/avg_per_day) if current_weight>goal_lbs else None
+goal_date = datetime.today() + timedelta(days=(current_weight-goal_lbs)/avg_per_day) if current_weight>goal_lbs and avg_per_day>0 else None
 countdown_days = (goal_date - datetime.today()).days if goal_date else None
 
-# ---- Metrics Tiles CSS ----
+# ---- Styles ----
 tile_style = """
 <style>
 .metric-box {
@@ -247,8 +245,8 @@ tile_style = """
 }
 .metric-label {
     font-size: 16px;
-    font-weight: normal;
     margin-bottom: 4px;
+    font-weight: normal;
 }
 .metric-value {
     font-size: 22px;
@@ -258,57 +256,114 @@ tile_style = """
 """
 st.markdown(tile_style, unsafe_allow_html=True)
 
-# ---- Top Row Metrics ----
+# ---- Tiles Top Row ----
 col1, col2, col3 = st.columns(3)
 with col1:
-    st.markdown(f'<div class="metric-box"><div class="metric-label">Total Weight Lost</div><div class="metric-value">{lbs_to_st_lbs(loss)}</div></div>', unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="metric-box">
+        <div class="metric-label">Today's Steps</div>
+        <div class="metric-value">{google_steps[-1]['steps'] if google_steps else 0}</div>
+    </div>
+    """, unsafe_allow_html=True)
 with col2:
-    st.markdown(f'<div class="metric-box"><div class="metric-label">Days Not Being Fat</div><div class="metric-value">{days} days</div></div>', unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="metric-box">
+        <div class="metric-label">Total Weight Lost</div>
+        <div class="metric-value">{lbs_to_st_lbs(loss)}</div>
+    </div>
+    """, unsafe_allow_html=True)
 with col3:
-    if google_steps:
-        today_steps = google_steps[-1]["steps"]
-    else:
-        today_steps = 0
-    st.markdown(f'<div class="metric-box"><div class="metric-label">Today\'s Steps</div><div class="metric-value">{today_steps}</div></div>', unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="metric-box">
+        <div class="metric-label">Days Not Being Fat</div>
+        <div class="metric-value">{days} days</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-# ---- Fitbit Daily Graph ----
-y_min = int(df["weight_lbs"].min())-1
-y_max = int(df["weight_lbs"].max())+1
+# ---- Tiles Second Row ----
+col4, col5, col6 = st.columns(3)
+with col4:
+    st.markdown(f"""
+    <div class="metric-box">
+        <div class="metric-label">Goal Weight</div>
+        <div class="metric-value">{goal_stone}st ({goal_lbs:.1f} lbs)</div>
+    </div>
+    """, unsafe_allow_html=True)
+with col5:
+    st.markdown(f"""
+    <div class="metric-box">
+        <div class="metric-label">Estimated Goal Date</div>
+        <div class="metric-value">{goal_date.strftime('%d-%m-%Y') if goal_date else '🎯 Goal reached!'}</div>
+    </div>
+    """, unsafe_allow_html=True)
+with col6:
+    st.markdown(f"""
+    <div class="metric-box">
+        <div class="metric-label">Days Until Goal</div>
+        <div class="metric-value">{countdown_days if countdown_days else 0}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ---- Helper for Graph Ticks ----
+def lbs_to_stlbs_ticks(lbs):
+    total = round(lbs)
+    stn = total // 14
+    lbs_left = total % 14
+    return f"{stn}st {lbs_left}lbs"
+
+y_min = int(df["weight_lbs"].min()) - 1
+y_max = int(df["weight_lbs"].max()) + 1
 y_ticks = list(range(y_min, y_max+1))
-y_tick_text = [lbs_to_st_lbs(i) for i in y_ticks]
+y_tick_text = [lbs_to_stlbs_ticks(i) for i in y_ticks]
 
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=df["dateTime"], y=df["weight_lbs"], mode="lines+markers", name="Actual Weight", customdata=df["weight_stlbs"], hovertemplate="Date: %{x|%d-%m-%Y}<br>Weight: %{customdata}<extra></extra>", line=dict(color="cyan"), marker=dict(color="cyan")))
-fig.add_trace(go.Scatter(x=[journey_start, datetime(2026,1,1)], y=[start_weight, goal_lbs], mode="lines", name="Goal Trendline", line=dict(color="red", dash="dash")))
-fig.update_layout(plot_bgcolor="#3C3C3C", paper_bgcolor="#3C3C3C", font_color="white", margin=dict(l=40,r=40,t=40,b=40), xaxis_title="Date", yaxis=dict(range=[y_min,y_max], tickvals=y_ticks, ticktext=y_tick_text, gridcolor="#555"))
-st.markdown('<div class="section-title">📅 Daily Weight Over Time</div>', unsafe_allow_html=True)
-st.plotly_chart(fig, use_container_width=True)
+# ---- Last 7 Days Weight Graph ----
+df_7d = df[df["dateTime"] >= datetime.today() - timedelta(days=7)]
+y_min_7 = int(df_7d["weight_lbs"].min()) - 1
+y_max_7 = int(df_7d["weight_lbs"].max()) + 1
+y_ticks_7 = list(range(y_min_7, y_max_7+1))
+y_tick_text_7 = [lbs_to_stlbs_ticks(i) for i in y_ticks_7]
 
-# ---- Google Fit Steps Graph ----
-if google_steps:
-    df_steps = pd.DataFrame(google_steps)
-    fig_steps = go.Figure()
-    fig_steps.add_trace(go.Bar(x=df_steps["date"], y=df_steps["steps"], marker_color="cyan"))
-    fig_steps.update_layout(plot_bgcolor="#3C3C3C", paper_bgcolor="#3C3C3C", font_color="white", margin=dict(l=40,r=40,t=40,b=40), yaxis_title="Steps", xaxis_title="Date")
-    st.markdown('<div class="section-title">📅 Steps Last 7 Days</div>', unsafe_allow_html=True)
-    st.plotly_chart(fig_steps, use_container_width=True)
+fig7 = go.Figure()
+fig7.add_trace(go.Scatter(x=df_7d["dateTime"], y=df_7d["weight_lbs"], mode="lines+markers",
+                          customdata=df_7d["weight_stlbs"], hovertemplate="Date: %{x|%d-%m-%Y}<br>Weight: %{customdata}<extra></extra>",
+                          line=dict(color="cyan"), marker=dict(color="cyan")))
+fig7.update_layout(
+    plot_bgcolor="#3C3C3C", paper_bgcolor="#3C3C3C", font_color="white",
+    xaxis=dict(range=[df_7d["dateTime"].min()-timedelta(days=0.5), df_7d["dateTime"].max()+timedelta(days=0.5)],
+               tickformat="%d-%m-%Y"),
+    yaxis=dict(range=[y_min_7, y_max_7], tickvals=y_ticks_7, ticktext=y_tick_text_7, gridcolor="#555")
+)
+st.plotly_chart(fig7, use_container_width=True)
+
+# ---- Daily Weight Graph ----
+fig_daily = go.Figure()
+fig_daily.add_trace(go.Scatter(x=df["dateTime"], y=df["weight_lbs"], mode="lines+markers",
+                               customdata=df["weight_stlbs"], hovertemplate="Date: %{x|%d-%m-%Y}<br>Weight: %{customdata}<extra></extra>",
+                               line=dict(color="cyan"), marker=dict(color="cyan")))
+fig_daily.update_layout(
+    plot_bgcolor="#3C3C3C", paper_bgcolor="#3C3C3C", font_color="white",
+    xaxis=dict(range=[df["dateTime"].min()-timedelta(days=0.5), df["dateTime"].max()+timedelta(days=0.5)],
+               tickformat="%d-%m-%Y"),
+    yaxis=dict(range=[y_min, y_max], tickvals=y_ticks, ticktext=y_tick_text, gridcolor="#555")
+)
+st.plotly_chart(fig_daily, use_container_width=True)
 
 # ---- Weekly Weight Loss ----
 df['week'] = df['dateTime'].dt.to_period('W').apply(lambda r: r.start_time)
 weekly = df.groupby('week')['weight_lbs'].mean().reset_index()
 weekly['weight_loss'] = weekly['weight_lbs'].shift(1) - weekly['weight_lbs']
 weekly = weekly.dropna(subset=['weight_loss'])
-weekly['text'] = weekly['weight_loss'].apply(lambda x: f"-{abs(x):.1f}" if x>0 else (f"+{abs(x):.1f}" if x<0 else "0.0"))
 weekly['color'] = weekly['weight_loss'].apply(lambda v: 'green' if v>0 else ('red' if v<0 else 'gray'))
 figw = go.Figure()
-for color, dfc in weekly.groupby('color'):
-    figw.add_trace(go.Bar(x=dfc['week'], y=dfc['weight_loss'], marker_color=color, text=dfc['text'], textposition='outside'))
-figw.update_layout(plot_bgcolor="#3C3C3C", paper_bgcolor="#3C3C3C", font_color="white", margin=dict(l=40,r=40,t=40,b=40), xaxis_title="Week Starting", xaxis=dict(tickformat="%d-%m-%Y", gridcolor="#555"), yaxis=dict(title="Weight Change (lbs)", tickvals=y_ticks, ticktext=y_tick_text, zeroline=True, zerolinecolor="white", zerolinewidth=2, gridcolor="#555"))
-st.markdown('<div class="section-title">📊 Weekly Weight Loss</div>', unsafe_allow_html=True)
+for _, row in weekly.iterrows():
+    figw.add_trace(go.Bar(x=[row['week']], y=[row['weight_loss']], marker_color=row['color'],
+                          text=[f"{-row['weight_loss']:.1f}" if row['weight_loss']>0 else f"{-row['weight_loss']:.1f}"], textposition='outside'))
+figw.update_layout(plot_bgcolor="#3C3C3C", paper_bgcolor="#3C3C3C", font_color="white",
+                   xaxis=dict(tickformat="%d-%m-%Y", gridcolor="#555"),
+                   yaxis=dict(zeroline=True, zerolinecolor="white", zerolinewidth=2, gridcolor="#555"))
 st.plotly_chart(figw, use_container_width=True)
 
 # ---- Raw Weight Log ----
-df_sorted = df.sort_values(by='dateTime', ascending=False)
+df_sorted = df.sort_values(by="dateTime", ascending=False)
 df_sorted['date'] = df_sorted['dateTime'].dt.date
-st.markdown('<div class="section-title">📋 Raw Weight Log</div>', unsafe_allow_html=True)
-st.dataframe(df_sorted[['date','weight_stlbs']].rename(columns={'date':'Date','weight_stlbs':'Weight'}).reset_index(drop=True))
+st.dataframe(df_sorted[['date', 'weight_stlbs']].rename(columns={'date':'Date', 'weight_stlbs':'Weight'}).reset_index(drop=True))
