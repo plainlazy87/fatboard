@@ -247,7 +247,7 @@ else:
 
 
 
-# ---- 24lb Visual Goal Grid (0.5lb increments, 6x4, large circles + subtle pulse) ----
+# ---- 24lb Visual Goal Grid (0.5lb increments, 4x6, slightly smaller circles + subtle pulse) ----
 from decimal import Decimal, ROUND_HALF_UP
 
 GOAL_LOSS_LBS = 24
@@ -266,11 +266,14 @@ def round_to_half_up(x: float) -> float:
     d = d.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
     return float(d / Decimal("2"))
 
-def render_circle_grid(loss_rounded_half: float, total: int = 24, cols: int = 6):
+def render_circle_grid(loss_rounded_half: float, total: int = 24, cols: int = 4):
     loss_rounded_half = max(0.0, min(float(total), float(loss_rounded_half)))
 
     full = int(loss_rounded_half // 1)
     half = (loss_rounded_half - full) >= 0.5 and full < total
+
+    # Previous size was 88px. Make ~10% smaller => ~79px.
+    dot_size = 79
 
     st.markdown(f"""
     <style>
@@ -293,15 +296,16 @@ def render_circle_grid(loss_rounded_half: float, total: int = 24, cols: int = 6)
 
       .circle-grid {{
         display: grid;
-        grid-template-columns: repeat({cols}, 88px);   /* 6 columns => 6x4 */
-        gap: 16px;
+        grid-template-columns: repeat({cols}, {dot_size}px);  /* 4 columns => 4x6 */
+        gap: 14px;
         align-items: center;
         justify-content: start;
+        max-width: 100%;
       }}
 
       .dot {{
-        width: 88px;
-        height: 88px;
+        width: {dot_size}px;
+        height: {dot_size}px;
         border-radius: 50%;
         background: #111;              /* empty = black */
         border: 2px solid #333;
@@ -319,9 +323,9 @@ def render_circle_grid(loss_rounded_half: float, total: int = 24, cols: int = 6)
 
       /* --- Subtle pulse animation for filled dots --- */
       @keyframes subtlePulse {{
-        0%   {{ transform: scale(1);   filter: brightness(1); }}
-        50%  {{ transform: scale(1.035); filter: brightness(1.08); }}
-        100% {{ transform: scale(1);   filter: brightness(1); }}
+        0%   {{ transform: scale(1);     filter: brightness(1); }}
+        50%  {{ transform: scale(1.03);  filter: brightness(1.08); }}
+        100% {{ transform: scale(1);     filter: brightness(1); }}
       }}
 
       .dot.pulse {{
@@ -384,8 +388,8 @@ loss_rounded_half = round_to_half_up(lost_since_baseline)
 # Clamp within [0, 24]
 loss_rounded_half = max(0.0, min(float(GOAL_LOSS_LBS), loss_rounded_half))
 
-# Render 6x4 grid of 24 circles with full/half fills + pulse
-render_circle_grid(loss_rounded_half, total=GOAL_LOSS_LBS, cols=6)
+# Render 4x6 grid of 24 circles with full/half fills + pulse
+render_circle_grid(loss_rounded_half, total=GOAL_LOSS_LBS, cols=4)
 
 # Reset baseline button BELOW the grid
 st.markdown('<div class="reset-wrap">', unsafe_allow_html=True)
