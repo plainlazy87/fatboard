@@ -247,7 +247,7 @@ else:
 
 
 
-# ---- 24lb Visual Goal Grid (0.5lb increments, 6x4) ----
+# ---- 24lb Visual Goal Grid (0.5lb increments, 6x4, large circles) ----
 from decimal import Decimal, ROUND_HALF_UP
 
 GOAL_LOSS_LBS = 24
@@ -267,7 +267,6 @@ def round_to_half_up(x: float) -> float:
     return float(d / Decimal("2"))
 
 def render_circle_grid(loss_rounded_half: float, total: int = 24, cols: int = 6):
-    # loss_rounded_half in [0, 24] step 0.5
     loss_rounded_half = max(0.0, min(float(total), float(loss_rounded_half)))
 
     full = int(loss_rounded_half // 1)
@@ -275,35 +274,51 @@ def render_circle_grid(loss_rounded_half: float, total: int = 24, cols: int = 6)
 
     st.markdown(f"""
     <style>
-      .goal-wrap {{ margin: 6px 0 16px 0; }}
-      .goal-title {{ color: white; font-size: 18px; font-weight: 700; margin-bottom: 6px; }}
-      .goal-sub {{ color: #BDBDBD; font-size: 13px; margin-bottom: 10px; }}
+      .goal-wrap {{
+        margin: 10px 0 10px 0;
+      }}
+
+      .goal-title {{
+        color: white;
+        font-size: 20px;
+        font-weight: 700;
+        margin-bottom: 6px;
+      }}
+
+      .goal-sub {{
+        color: #BDBDBD;
+        font-size: 14px;
+        margin-bottom: 14px;
+      }}
 
       .circle-grid {{
         display: grid;
-        grid-template-columns: repeat({cols}, 22px);   /* 6 columns => 6x4 */
-        gap: 10px;
+        grid-template-columns: repeat({cols}, 88px);   /* 6 columns => 6x4 */
+        gap: 16px;
         align-items: center;
         justify-content: start;
       }}
 
       .dot {{
-        width: 22px;
-        height: 22px;
+        width: 88px;
+        height: 88px;
         border-radius: 50%;
         background: #111;              /* empty = black */
-        border: 1px solid #333;
+        border: 2px solid #333;
       }}
 
       .dot.full {{
         background: #21C55D;           /* full = green */
-        border: 1px solid #1FAE52;
+        border: 2px solid #1FAE52;
       }}
 
       .dot.half {{
-        /* left half green, right half black */
         background: linear-gradient(90deg, #21C55D 50%, #111 50%);
-        border: 1px solid #333;
+        border: 2px solid #333;
+      }}
+
+      .reset-wrap {{
+        margin-top: 14px;
       }}
     </style>
     """, unsafe_allow_html=True)
@@ -322,7 +337,7 @@ def render_circle_grid(loss_rounded_half: float, total: int = 24, cols: int = 6)
     <div class="goal-wrap">
       <div class="goal-title">🎯 24lb Challenge</div>
       <div class="goal-sub">
-        Each dot = 1lb. Half dot = 0.5lb. Progress rounds to nearest 0.5 (normal rules). No weights shown.
+        Each circle = 1lb. Half circle = 0.5lb. Rounded to nearest 0.5. No weights shown.
       </div>
       <div class="circle-grid">
         {''.join(dots_html)}
@@ -342,19 +357,6 @@ if not goal_state.get("baseline_lbs"):
     }
     save_goal_state(goal_state)
 
-# Optional: button to reset baseline to "today"
-colA, colB = st.columns([1, 3])
-with colA:
-    if st.button("🔁 Reset baseline"):
-        goal_state = {
-            "baseline_lbs": float(current_weight),
-            "baseline_set_at": datetime.today().strftime("%Y-%m-%d"),
-            "goal_loss_lbs": GOAL_LOSS_LBS
-        }
-        save_goal_state(goal_state)
-with colB:
-    st.caption("Reset sets your baseline to your latest weigh-in (still doesn’t show the number).")
-
 baseline_lbs = float(goal_state["baseline_lbs"])
 lost_since_baseline = baseline_lbs - float(current_weight)
 
@@ -366,7 +368,20 @@ loss_rounded_half = max(0.0, min(float(GOAL_LOSS_LBS), loss_rounded_half))
 
 # Render 6x4 grid of 24 circles with full/half fills
 render_circle_grid(loss_rounded_half, total=GOAL_LOSS_LBS, cols=6)
+
+# Reset baseline button BELOW the grid
+st.markdown('<div class="reset-wrap">', unsafe_allow_html=True)
+if st.button("🔁 Reset baseline"):
+    goal_state = {
+        "baseline_lbs": float(current_weight),
+        "baseline_set_at": datetime.today().strftime("%Y-%m-%d"),
+        "goal_loss_lbs": GOAL_LOSS_LBS
+    }
+    save_goal_state(goal_state)
+st.caption("Reset sets your baseline to your latest weigh-in (still doesn’t show the number).")
+st.markdown('</div>', unsafe_allow_html=True)
 # ---- end 24lb Visual Goal Grid ----
+
 
 
 
