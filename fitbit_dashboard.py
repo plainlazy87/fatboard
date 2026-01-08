@@ -247,7 +247,7 @@ else:
 
 
 
-# ---- 24lb Visual Goal Grid (0.5lb increments, 6x4, large circles) ----
+# ---- 24lb Visual Goal Grid (0.5lb increments, 6x4, large circles + subtle pulse) ----
 from decimal import Decimal, ROUND_HALF_UP
 
 GOAL_LOSS_LBS = 24
@@ -317,6 +317,24 @@ def render_circle_grid(loss_rounded_half: float, total: int = 24, cols: int = 6)
         border: 2px solid #333;
       }}
 
+      /* --- Subtle pulse animation for filled dots --- */
+      @keyframes subtlePulse {{
+        0%   {{ transform: scale(1);   filter: brightness(1); }}
+        50%  {{ transform: scale(1.035); filter: brightness(1.08); }}
+        100% {{ transform: scale(1);   filter: brightness(1); }}
+      }}
+
+      .dot.pulse {{
+        animation: subtlePulse 1.6s ease-in-out infinite;
+      }}
+
+      /* Prefer reduced motion accessibility */
+      @media (prefers-reduced-motion: reduce) {{
+        .dot.pulse {{
+          animation: none !important;
+        }}
+      }}
+
       .reset-wrap {{
         margin-top: 14px;
       }}
@@ -326,9 +344,9 @@ def render_circle_grid(loss_rounded_half: float, total: int = 24, cols: int = 6)
     dots_html = []
     for i in range(total):
         if i < full:
-            cls = "dot full"
+            cls = "dot full pulse"
         elif i == full and half:
-            cls = "dot half"
+            cls = "dot half pulse"
         else:
             cls = "dot"
         dots_html.append(f'<div class="{cls}"></div>')
@@ -366,7 +384,7 @@ loss_rounded_half = round_to_half_up(lost_since_baseline)
 # Clamp within [0, 24]
 loss_rounded_half = max(0.0, min(float(GOAL_LOSS_LBS), loss_rounded_half))
 
-# Render 6x4 grid of 24 circles with full/half fills
+# Render 6x4 grid of 24 circles with full/half fills + pulse
 render_circle_grid(loss_rounded_half, total=GOAL_LOSS_LBS, cols=6)
 
 # Reset baseline button BELOW the grid
@@ -381,6 +399,7 @@ if st.button("🔁 Reset baseline"):
 st.caption("Reset sets your baseline to your latest weigh-in (still doesn’t show the number).")
 st.markdown('</div>', unsafe_allow_html=True)
 # ---- end 24lb Visual Goal Grid ----
+
 
 
 
