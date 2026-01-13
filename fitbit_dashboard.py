@@ -188,7 +188,7 @@ elif refresh_token_val and not access_token:
         st.stop()
 
 # Now fetch Fitbit weight data with valid access token
-@st.cache_data(ttl=300)  # CHANGED: cache for 5 minutes
+@st.cache_data(ttl=60)  # CHANGED: cache for 1 minutes
 def fetch_weight_data_cached(access_token):
     return fetch_weight_data(access_token)
 
