@@ -100,7 +100,7 @@ def fetch_weight_data(access_token):
             f"https://api.fitbit.com/1/user/-/body/log/weight/date/"
             f"{start_date.strftime('%Y-%m-%d')}/{chunk_end.strftime('%Y-%m-%d')}.json"
         )
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=20)  # CHANGED: add timeout
         if response.status_code != 200:
             st.error(f"Error fetching data: {response.status_code}")
             st.json(response.json())
@@ -119,7 +119,6 @@ st.title("Fat Packer Tracker")
 #code = st.experimental_get_query_params().get("code", [None])[0]
 code = st.query_params.get("code", [None])[0]
 
-
 tokens = load_tokens()
 access_token = tokens.get("access_token")
 refresh_token_val = tokens.get("refresh_token")
@@ -128,7 +127,7 @@ refresh_token_val = tokens.get("refresh_token")
 def is_token_valid(token):
     test_url = "https://api.fitbit.com/1/user/-/profile.json"
     headers = {"Authorization": f"Bearer {token}"}
-    resp = requests.get(test_url, headers=headers)
+    resp = requests.get(test_url, headers=headers, timeout=20)  # CHANGED: add timeout
     return resp.status_code == 200
 
 # Refresh if access token is present but expired
@@ -149,7 +148,6 @@ if access_token and not is_token_valid(access_token):
 if not access_token and not code:
     st.markdown(f"[Connect your Fitbit account]({AUTH_URL})")
     st.stop()
-
 
 # Exchange code for tokens only if code exists and no access token
 if code and not access_token:
@@ -190,7 +188,11 @@ elif refresh_token_val and not access_token:
         st.stop()
 
 # Now fetch Fitbit weight data with valid access token
-data = fetch_weight_data(access_token)
+@st.cache_data(ttl=300)  # CHANGED: cache for 5 minutes
+def fetch_weight_data_cached(access_token):
+    return fetch_weight_data(access_token)
+
+data = fetch_weight_data_cached(access_token)  # CHANGED: use cached fetch
 if "weight" not in data or len(data["weight"]) == 0:
     st.error("No weight data found. Have you logged your weight recently in the Fitbit app?")
     st.json(data)
@@ -198,8 +200,12 @@ if "weight" not in data or len(data["weight"]) == 0:
 
 weights = data["weight"]
 df = pd.DataFrame(weights)
-df["dateTime"] = pd.to_datetime(df["date"])
-df = df.sort_values("dateTime")
+
+# CHANGED: preserve time (Fitbit includes 'time')
+df["dateTime"] = pd.to_datetime(df["date"] + " " + df["time"], errors="coerce")
+df = df.dropna(subset=["dateTime"])
+df = df.sort_values("dateTime", kind="mergesort")
+
 df["date"] = df["dateTime"].dt.strftime("%d-%m-%Y")
 df["weight_lbs"] = df["weight"].apply(kg_to_lbs)
 df["weight_stlbs"] = df["weight_lbs"].apply(lbs_to_st_lbs)
@@ -233,19 +239,6 @@ else:
 #st.write(f"Total loss: {loss:.1f} lbs over {days} days")
 #if countdown_days:
 #    st.write(f"Estimated days to reach goal of {goal_stone} stone: {countdown_days} days")
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 # ---- 24lb Visual Goal Grid (0.5lb increments, 4x6, slightly smaller circles + subtle pulse) ----
 from decimal import Decimal, ROUND_HALF_UP
@@ -404,39 +397,9 @@ st.caption("Reset sets your baseline to your latest weigh-in (still doesn’t sh
 st.markdown('</div>', unsafe_allow_html=True)
 # ---- end 24lb Visual Goal Grid ----
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # ---- Metrics Display ----
 st.subheader("📌 Latest Weigh-In")
 st.metric("Latest Weight", lbs_to_st_lbs(current_weight), delta=f"{current_weight - start_weight:.1f} lbs")
-
 
 progress_style = """
 <style>
@@ -469,8 +432,6 @@ st.markdown(progress_style, unsafe_allow_html=True)
 # You can keep the rest of your script as is, just be sure not to mix st.query_params with experimental_get_query_params
 
 # For brevity, I’m not repeating the full UI code here as it’s unchanged.
-
-
 
 # Row 1 (3 columns): show 2 boxes, skip 3rd
 col1, col2, col3 = st.columns(3)
@@ -524,7 +485,6 @@ with col6:
         """, unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
-
 
 # --- Helper function for stone + lbs ticks ---
 def lbs_to_stlbs_ticks(lbs):
@@ -607,27 +567,6 @@ with st.container():
     st.plotly_chart(fig_7day, use_container_width=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # ---- Daily Weight Over Time Graph ----
 with st.container():
     st.markdown('<div class="section-title">📅 Daily Weight Over Time</div>', unsafe_allow_html=True)
@@ -659,29 +598,29 @@ with st.container():
         xaxis_title="Date",
         yaxis_title="Weight",
         xaxis=dict(
-    range=[
-        df["dateTime"].min() - timedelta(days=0.5),
-        df["dateTime"].max() + timedelta(days=0.5)
-    ],
-                   
-                   tickformat="%d-%m-%Y"),
+            range=[
+                df["dateTime"].min() - timedelta(days=0.5),
+                df["dateTime"].max() + timedelta(days=0.5)
+            ],
+            tickformat="%d-%m-%Y"
+        ),
         yaxis=dict(
             range=[y_min, y_max],
             tickvals=y_ticks,
             ticktext=y_tick_text,
             gridcolor="#555",
         ),
-legend=dict(
-    bgcolor="#3C3C3C",
-    bordercolor="#222",
-    borderwidth=1,
-    font=dict(color="white"),
-    orientation="h",
-    yanchor="bottom",
-    y=1.1,
-    xanchor="right",
-    x=1
-)
+        legend=dict(
+            bgcolor="#3C3C3C",
+            bordercolor="#222",
+            borderwidth=1,
+            font=dict(color="white"),
+            orientation="h",
+            yanchor="bottom",
+            y=1.1,
+            xanchor="right",
+            x=1
+        )
     )
     st.plotly_chart(fig, use_container_width=True)
 
