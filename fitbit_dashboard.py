@@ -89,27 +89,38 @@ def refresh_access_token(refresh_token):
     )
     return response
 
+
+
+
+
+
+
+
+
 def fetch_weight_data(access_token):
-    start_date = datetime(2025, 5, 12)
-    end_date = datetime.today()
-    all_data = []
     headers = {"Authorization": f"Bearer {access_token}"}
-    while start_date <= end_date:
-        chunk_end = min(start_date + timedelta(days=30), end_date)
-        url = (
-            f"https://api.fitbit.com/1/user/-/body/log/weight/date/"
-            f"{start_date.strftime('%Y-%m-%d')}/{chunk_end.strftime('%Y-%m-%d')}.json"
-        )
-        response = requests.get(url, headers=headers, timeout=20)  # CHANGED: add timeout
-        if response.status_code != 200:
-            st.error(f"Error fetching data: {response.status_code}")
-            st.json(response.json())
-            break
-        data_chunk = response.json()
-        if "weight" in data_chunk:
-            all_data.extend(data_chunk["weight"])
-        start_date = chunk_end + timedelta(days=1)
-    return {"weight": all_data}
+
+    # Let Fitbit decide what "today" is (fixes timezone / boundary bugs)
+    url = "https://api.fitbit.com/1/user/-/body/log/weight/date/today/365d.json"
+
+    response = requests.get(url, headers=headers, timeout=20)
+    if response.status_code != 200:
+        st.error(f"Error fetching data: {response.status_code}")
+        st.json(response.json())
+        return {"weight": []}
+
+    return response.json()
+
+
+
+
+
+
+
+
+
+
+
 
 # Streamlit app setup
 st.set_page_config(page_title="Fitbit Weight Loss Dashboard", layout="centered")
@@ -189,6 +200,14 @@ elif refresh_token_val and not access_token:
 
 # Now fetch Fitbit weight data with valid access token
 @st.cache_data(ttl=60)  # CHANGED: cache for 1 minutes
+
+
+
+
+
+
+
+
 def fetch_weight_data_cached(access_token):
     return fetch_weight_data(access_token)
 
