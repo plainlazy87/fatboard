@@ -229,9 +229,9 @@ if "weight" not in data or len(data["weight"]) == 0:
 weights = data["weight"]
 df = pd.DataFrame(weights)
 
-# CHANGED: preserve time (Fitbit includes 'time')
 df["dateTime"] = pd.to_datetime(df["date"] + " " + df["time"], errors="coerce")
 df = df.dropna(subset=["dateTime"])
+df = df.sort_values(["dateTime", "logId"], kind="mergesort")
 
 if "logId" in df.columns:
     df = df.sort_values(["dateTime", "logId"], kind="mergesort")
