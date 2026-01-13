@@ -99,7 +99,7 @@ def refresh_access_token(refresh_token):
 
 def fetch_weight_data(access_token):
     start_date = datetime(2025, 5, 12)
-    end_date = datetime.today()
+    end_date = datetime.utcnow() + timedelta(days=1)
     all_data = []
     headers = {"Authorization": f"Bearer {access_token}"}
     while start_date <= end_date:
