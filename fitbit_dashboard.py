@@ -223,7 +223,12 @@ df = pd.DataFrame(weights)
 # CHANGED: preserve time (Fitbit includes 'time')
 df["dateTime"] = pd.to_datetime(df["date"] + " " + df["time"], errors="coerce")
 df = df.dropna(subset=["dateTime"])
-df = df.sort_values("dateTime", kind="mergesort")
+
+if "logId" in df.columns:
+    df = df.sort_values(["dateTime", "logId"], kind="mergesort")
+else:
+    df = df.sort_values("dateTime", kind="mergesort")
+
 
 df["date"] = df["dateTime"].dt.strftime("%d-%m-%Y")
 df["weight_lbs"] = df["weight"].apply(kg_to_lbs)
